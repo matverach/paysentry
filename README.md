@@ -29,13 +29,21 @@ Este proyecto está en **fase de diseño de arquitectura**. El objetivo es explo
 
 | Fase | Estado | Documento |
 |------|--------|-----------|
-| Problem Statement | 🔄 En progreso | [01-problem.md](docs/01-problem.md) |
-| Requirements | ⏳ Pendiente | [02-requirements.md](docs/02-requirements.md) |
-| Data Model | ⏳ Pendiente | [03-data-model.md](docs/03-data-model.md) |
-| ADRs | ⏳ Pendiente | [docs/adr/](docs/adr/) |
+| Problem Statement | ✅ Completado | [01-problem.md](docs/01-problem.md) |
+| Requirements | ✅ Completado | [02-requirements.md](docs/02-requirements.md) |
+| Data Model | ⏳ Siguiente | [03-data-model.md](docs/03-data-model.md) |
+| ADRs | 🔄 En progreso (3/?) | [docs/adr/](docs/adr/) |
 | System Context (C4) | ⏳ Pendiente | docs/architecture/ |
 | API Spec | ⏳ Pendiente | docs/api/ |
 | Implementation | ⏳ Pendiente | src/ |
+
+### Architecture Decision Records (ADRs)
+
+| ADR | Decisión | Estado |
+|-----|----------|--------|
+| [ADR-001](docs/adr/001-mock-adapter-for-mvp.md) | Mock Adapter para MVP | ✅ Accepted |
+| [ADR-002](docs/adr/002-transactional-event-log.md) | Event Log Transaccional | ✅ Accepted |
+| [ADR-003](docs/adr/003-agent-token-storage.md) | Agent Token Storage (bcrypt) | ✅ Accepted |
 
 ## 📚 Documentación
 
