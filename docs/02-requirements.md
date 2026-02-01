@@ -2,246 +2,246 @@
 
 ---
 
-## 1. Constraints (Restricciones)
+## 1. Constraints
 
-> **Qué son:** Limitaciones impuestas externamente que no podés cambiar. Definen el espacio de soluciones posibles.
+> **What they are:** Externally imposed limitations that you can't change. They define the solution space.
 
-### 1.1 Técnicas
+### 1.1 Technical
 
-| ID | Restricción | Razón |
-|----|-------------|-------|
-| CON-T01 | Procesador de pagos: MercadoPago (Mock Adapter para MVP) | Mercado argentino, decisión ya tomada (ADR-001) |
-| CON-T02 | Presupuesto cloud: $0-200/mes | Proyecto personal, no comercial |
-| CON-T03 | Backend: Python (FastAPI) | Stack conocido, rápido para prototipar |
-| CON-T04 | Base de datos: PostgreSQL | ACID requerido, ya decidido |
+| ID | Constraint | Reason |
+|----|------------|--------|
+| CON-T01 | Payment processor: MercadoPago (Mock Adapter for MVP) | Argentine market, decision already made (ADR-001) |
+| CON-T02 | Cloud budget: $0-200/month | Personal project, not commercial |
+| CON-T03 | Backend: Python (FastAPI) | Known stack, fast prototyping |
+| CON-T04 | Database: PostgreSQL | ACID required, already decided |
 
-### 1.2 De Negocio
+### 1.2 Business
 
-| ID | Restricción | Razón |
-|----|-------------|-------|
-| CON-B01 | No requiere licencia bancaria | Simplifica regulación, actúa como middleware |
-| CON-B02 | Solo mercado argentino (ARS, MercadoPago) | Scope limitado para MVP |
+| ID | Constraint | Reason |
+|----|------------|--------|
+| CON-B01 | No banking license required | Simplifies regulation, acts as middleware |
+| CON-B02 | Argentine market only (ARS, MercadoPago) | Limited scope for MVP |
 
-### 1.3 De Tiempo
+### 1.3 Time
 
-| ID | Restricción | Razón |
-|----|-------------|-------|
-| CON-TIME01 | Fase de diseño: ~6-8 semanas | Proyecto paralelo al trabajo full-time |
-| CON-TIME02 | Implementación MVP: ~4-6 semanas | Solo funcionalidad core |
-
----
-
-## 2. Casos de Uso Críticos
-
-> **Por qué primero:** Todos los requisitos funcionales se derivan de estos casos de uso concretos.
-
-### Caso de Uso 1: Pago Automático de Expensas (Happy Path)
-
-**Actor:** Usuario (Martín) + Agente (Bot de Expensas)
-
-**Flujo:**
-1. Martín registra "Bot de Expensas" → recibe `agent_token`
-2. Martín crea política: `{max_per_transaction: 60000, daily_limit: 100000, approval_threshold: 50000}`
-3. Día 10 del mes: Bot solicita autorización para $45.000 a CBU del consorcio
-4. PaySentry evalúa:
-   - ✅ Monto < max_per_transaction (45k < 60k)
-   - ✅ Monto < daily_limit (45k < 100k, sin gasto previo)
-   - ✅ Monto < approval_threshold (45k < 50k) → **auto-aprobado**
-5. PaySentry ejecuta pago contra Mock Adapter
-6. Retorna `{status: "captured", payment_id: "..."}` al agente
-7. Martín ve notificación: "Tu agente pagó $45.000 en expensas"
-
-**Requisitos derivados:** FR-A01, FR-P01, FR-P02, FR-P03, FR-AUTH01, FR-AUTH02, FR-PAY01, FR-HIST01
+| ID | Constraint | Reason |
+|----|------------|--------|
+| CON-TIME01 | Design phase: ~6-8 weeks | Side project alongside full-time work |
+| CON-TIME02 | MVP implementation: ~4-6 weeks | Core functionality only |
 
 ---
 
-### Caso de Uso 2: Monto Excede Threshold → Aprobación Manual
+## 2. Critical Use Cases
 
-**Actor:** Usuario (Martín) + Agente (Bot de Expensas)
+> **Why first:** All functional requirements derive from these concrete use cases.
 
-**Flujo:**
-1. Mes siguiente: expensas suben a $55.000 (aumento de consorcio)
-2. Bot solicita autorización por $55.000
-3. PaySentry evalúa:
-   - ✅ Monto < max_per_transaction (55k < 60k)
-   - ✅ Monto < daily_limit (55k < 100k)
-   - ⚠️ Monto > approval_threshold (55k > 50k) → **requiere aprobación manual**
-4. PaySentry retorna `{status: "pending_approval", authorization_id: "auth_123"}`
-5. Martín recibe notificación push (simulada con GET /authorizations?status=pending)
-6. Martín revisa y aprueba: `POST /authorizations/auth_123/approve`
-7. Bot hace capture: `POST /authorizations/auth_123/capture`
-8. PaySentry ejecuta pago
+### Use Case 1: Automatic Expense Payment (Happy Path)
 
-**Requisitos derivados:** FR-P04, FR-APR01, FR-APR02, FR-AUTH03
+**Actor:** User (Martín) + Agent (Expense Bot)
 
----
+**Flow:**
+1. Martín registers "Expense Bot" → receives `agent_token`
+2. Martín creates policy: `{max_per_transaction: 60000, daily_limit: 100000, approval_threshold: 50000}`
+3. Day 10 of month: Bot requests authorization for $45,000 to building account
+4. PaySentry evaluates:
+   - ✅ Amount < max_per_transaction (45k < 60k)
+   - ✅ Amount < daily_limit (45k < 100k, no prior spending)
+   - ✅ Amount < approval_threshold (45k < 50k) → **auto-approved**
+5. PaySentry executes payment against Mock Adapter
+6. Returns `{status: "captured", payment_id: "..."}` to agent
+7. Martín sees notification: "Your agent paid $45,000 in expenses"
 
-### Caso de Uso 3: Violación de Política → Rechazo Automático
-
-**Actor:** Agente (Bot de Expensas)
-
-**Flujo:**
-1. Bot solicita autorización por $70.000 (error en configuración o ataque)
-2. PaySentry evalúa:
-   - ❌ Monto > max_per_transaction (70k > 60k)
-3. PaySentry retorna `{status: "denied", reason: "exceeded_max_transaction_limit"}`
-4. Bot no puede capturar
-5. Evento queda registrado en audit log
-
-**Requisitos derivados:** FR-P02, FR-AUTH02, FR-HIST01
+**Derived requirements:** FR-A01, FR-P01, FR-P02, FR-P03, FR-AUTH01, FR-AUTH02, FR-PAY01, FR-HIST01
 
 ---
 
-## 3. Requisitos No Funcionales (NFR)
+### Use Case 2: Amount Exceeds Threshold → Manual Approval
 
-> **Por qué antes de FRs:** Los NFRs definen la arquitectura. Un cambio aquí cambia TODO el diseño.
+**Actor:** User (Martín) + Agent (Expense Bot)
+
+**Flow:**
+1. Next month: expenses rise to $55,000 (building increase)
+2. Bot requests authorization for $55,000
+3. PaySentry evaluates:
+   - ✅ Amount < max_per_transaction (55k < 60k)
+   - ✅ Amount < daily_limit (55k < 100k)
+   - ⚠️ Amount > approval_threshold (55k > 50k) → **requires manual approval**
+4. PaySentry returns `{status: "pending_approval", authorization_id: "auth_123"}`
+5. Martín receives push notification (simulated with GET /authorizations?status=pending)
+6. Martín reviews and approves: `POST /authorizations/auth_123/approve`
+7. Bot captures: `POST /authorizations/auth_123/capture`
+8. PaySentry executes payment
+
+**Derived requirements:** FR-P04, FR-APR01, FR-APR02, FR-AUTH03
+
+---
+
+### Use Case 3: Policy Violation → Automatic Rejection
+
+**Actor:** Agent (Expense Bot)
+
+**Flow:**
+1. Bot requests authorization for $70,000 (configuration error or attack)
+2. PaySentry evaluates:
+   - ❌ Amount > max_per_transaction (70k > 60k)
+3. PaySentry returns `{status: "denied", reason: "exceeded_max_transaction_limit"}`
+4. Bot cannot capture
+5. Event is logged in audit log
+
+**Derived requirements:** FR-P02, FR-AUTH02, FR-HIST01
+
+---
+
+## 3. Non-Functional Requirements (NFR)
+
+> **Why before FRs:** NFRs define the architecture. A change here changes ALL the design.
 
 ### 3.1 Performance
 
-| ID | Requisito | Target | Justificación | Método de Verificación |
-|----|-----------|--------|---------------|------------------------|
-| NFR-PERF01 | Latencia de autorización (p95) | < 2000ms | Límite aceptable para UX en flujos de pago. Balances responsiveness vs complejidad de implementación para MVP. | Manual testing, opcional load test con k6 |
-| NFR-PERF02 | Throughput mínimo | > 1 req/s | Suficiente para validación de concepto con carga limitada | No requiere testing específico para MVP |
+| ID | Requirement | Target | Justification | Verification Method |
+|----|-------------|--------|---------------|---------------------|
+| NFR-PERF01 | Authorization latency (p95) | < 2000ms | Acceptable limit for payment flow UX. Balances responsiveness vs implementation complexity for MVP. | Manual testing, optional load test with k6 |
+| NFR-PERF02 | Minimum throughput | > 1 req/s | Sufficient for concept validation with limited load | No specific testing required for MVP |
 
-**Rationale:** Para MVP, el foco está en arquitectura correcta y confiabilidad sobre optimización prematura de performance. Targets escalan linealmente agregando recursos.
-
----
-
-### 3.2 Reliability (Confiabilidad)
-
-| ID | Requisito | Target | Justificación | Método de Verificación |
-|----|-----------|--------|---------------|------------------------|
-| NFR-REL01 | Cero doble cobros | 100% idempotencia garantizada | Crítico para sistemas financieros. Implementa at-least-once delivery + idempotencia = exactly-once semántico (DDIA Cap 7) | Integration tests con retries, manual testing con captures duplicados |
-| NFR-REL02 | Audit trail completo | 100% operaciones logueadas | Compliance requirement. Implementa event sourcing para reconstrucción de estado (ADR-002) | Test: verificar que cada POST /authorizations genera evento en event_log |
-| NFR-REL03 | Policy enforcement accuracy | 0% violaciones de política | Core value proposition del sistema - autorización confiable es requisito fundamental | Tests unitarios + e2e tests con diferentes políticas |
-
-**Rationale:** Estos NFRs definen la arquitectura del sistema. Son medibles, tienen targets absolutos (no "mejor esfuerzo"), y son no-negociables para un gateway de autorización financiera.
+**Rationale:** For MVP, focus is on correct architecture and reliability over premature performance optimization. Targets scale linearly by adding resources.
 
 ---
 
-### 3.3 Availability (Disponibilidad)
+### 3.2 Reliability
 
-| ID | Requisito | Target | Justificación | Método de Verificación |
-|----|-----------|--------|---------------|------------------------|
-| NFR-AVAIL01 | Uptime durante horario de demo | Best-effort, sin SLA | Es un POC, downtime no tiene impacto comercial. Sin fallback ni HA para MVP. | Monitoring manual, UptimeRobot opcional |
+| ID | Requirement | Target | Justification | Verification Method |
+|----|-------------|--------|---------------|---------------------|
+| NFR-REL01 | Zero double charges | 100% idempotency guaranteed | Critical for financial systems. Implements at-least-once delivery + idempotency = exactly-once semantics (DDIA Ch 7) | Integration tests with retries, manual testing with duplicate captures |
+| NFR-REL02 | Complete audit trail | 100% operations logged | Compliance requirement. Implements event sourcing for state reconstruction (ADR-002) | Test: verify every POST /authorizations generates event in event_log |
+| NFR-REL03 | Policy enforcement accuracy | 0% policy violations | Core value proposition of the system - reliable authorization is fundamental requirement | Unit tests + e2e tests with different policies |
 
-**Rationale:** Para un MVP single-tenant, best-effort availability es aceptable. Arquitectura permite agregar redundancia cuando escale.
+**Rationale:** These NFRs define the system architecture. They are measurable, have absolute targets (not "best effort"), and are non-negotiable for a financial authorization gateway.
+
+---
+
+### 3.3 Availability
+
+| ID | Requirement | Target | Justification | Verification Method |
+|----|-------------|--------|---------------|---------------------|
+| NFR-AVAIL01 | Uptime during demo hours | Best-effort, no SLA | It's a POC, downtime has no commercial impact. No fallback or HA for MVP. | Manual monitoring, optional UptimeRobot |
+
+**Rationale:** For a single-tenant MVP, best-effort availability is acceptable. Architecture allows adding redundancy when scaling.
 
 ---
 
 ### 3.4 Security
 
-| ID | Requisito | Target | Justificación | Método de Verificación |
-|----|-----------|--------|---------------|------------------------|
-| NFR-SEC01 | User tokens JWT con expiración | exp = 24h, firmados con HS256 | Tokens de sesión de corta duración, balance seguridad/UX | Code review, tests de validación |
-| NFR-SEC02 | Agent tokens hasheados | Almacenamiento con bcrypt (ADR-003) | Credenciales de larga duración, protección contra dump de DB | Code review, verificar que GET /agents no expone tokens |
-| NFR-SEC03 | No almacenar datos de tarjeta | 0 PAN/CVV stored | PCI-DSS compliance - MercadoPago maneja tokenización | Audit de schema DB |
-| NFR-SEC04 | HTTPS en producción | TLS 1.2+ | Protección de tokens en tránsito | Verificar deploy en Railway/Render |
+| ID | Requirement | Target | Justification | Verification Method |
+|----|-------------|--------|---------------|---------------------|
+| NFR-SEC01 | User tokens JWT with expiration | exp = 24h, signed with HS256 | Short-lived session tokens, security/UX balance | Code review, validation tests |
+| NFR-SEC02 | Hashed agent tokens | Storage with bcrypt (ADR-003) | Long-lived credentials, protection against DB dumps | Code review, verify GET /agents doesn't expose tokens |
+| NFR-SEC03 | No card data storage | 0 PAN/CVV stored | PCI-DSS compliance - MercadoPago handles tokenization | DB schema audit |
+| NFR-SEC04 | HTTPS in production | TLS 1.2+ | Token protection in transit | Verify deploy on Railway/Render |
 
-**Rationale:** Security debe ser "correcta por diseño", no agregada después. Estas prácticas son estándar en sistemas que manejan credenciales.
+**Rationale:** Security must be "correct by design", not added later. These practices are standard in systems handling credentials.
 
 ---
 
 ### 3.5 Maintainability
 
-| ID | Requisito | Target | Justificación | Método de Verificación |
-|----|-----------|--------|---------------|------------------------|
-| NFR-MAINT01 | Cobertura de tests | > 70% para lógica core (policy engine, idempotencia) | Garantiza confiabilidad en componentes críticos del sistema | Coverage report en CI |
-| NFR-MAINT02 | Logs estructurados | Todos los requests con correlation_id | Debuggabilidad y trazabilidad - crítico para sistemas financieros | Code review, verificar formato JSON |
-| NFR-MAINT03 | Documentación de API | OpenAPI 3.0 completa con ejemplos | Facilita integración de clientes y mantenibilidad del contrato de API | Validar que openapi.yaml cubre todos los endpoints |
+| ID | Requirement | Target | Justification | Verification Method |
+|----|-------------|--------|---------------|---------------------|
+| NFR-MAINT01 | Test coverage | > 70% for core logic (policy engine, idempotency) | Guarantees reliability in critical system components | Coverage report in CI |
+| NFR-MAINT02 | Structured logs | All requests with correlation_id | Debuggability and traceability - critical for financial systems | Code review, verify JSON format |
+| NFR-MAINT03 | API documentation | Complete OpenAPI 3.0 with examples | Facilitates client integration and API contract maintainability | Validate openapi.yaml covers all endpoints |
 
 ---
 
-## 4. Requisitos Funcionales (FR)
+## 4. Functional Requirements (FR)
 
-> **Derivados de los 3 casos de uso críticos**
+> **Derived from the 3 critical use cases**
 
-### 4.1 Gestión de Usuarios
+### 4.1 User Management
 
-| ID | Requisito | Prioridad | Criterio de Aceptación |
-|----|-----------|-----------|------------------------|
-| FR-U01 | El sistema debe permitir registrar un usuario con email y password | Must | Dado email válido y password >= 8 chars, cuando POST /users/register, entonces retorna {user_id, user_token} y status 201 |
-| FR-U02 | El sistema debe autenticar usuarios con email/password | Must | Dado credenciales válidas, cuando POST /auth/login, entonces retorna JWT con exp=24h y scopes={policies:*, agents:*, authorizations:*} |
-| FR-U03 | El sistema debe rechazar autenticación con credenciales inválidas | Must | Dado password incorrecto, cuando POST /auth/login, entonces retorna 401 Unauthorized |
-| FR-U04 | El sistema debe validar formato de email en registro | Should | Dado email inválido (sin @), cuando POST /users/register, entonces retorna 400 Bad Request con mensaje descriptivo |
-
----
-
-### 4.2 Gestión de Agentes
-
-| ID | Requisito | Prioridad | Criterio de Aceptación | Caso de Uso |
-|----|-----------|-----------|------------------------|-------------|
-| FR-A01 | El sistema debe permitir a un usuario registrar un nuevo agente | Must | Dado user_token válido, cuando POST /agents con {name, description}, entonces retorna {agent_id, agent_token} en plain text una sola vez | CU1, CU2, CU3 |
-| FR-A02 | El sistema debe almacenar agent_token hasheado (ADR-003) | Must | Los agent_tokens se almacenan hasheados en DB con bcrypt, imposibilitando recuperación posterior | CU1 |
-| FR-A03 | El sistema debe generar agent_tokens con formato identificable | Must | Tokens generados tienen formato "agt_" + 32 chars aleatorios (base62), scopes implícitos: {authorizations:create, authorizations:read} | CU1 |
-| FR-A04 | El sistema debe permitir listar agentes del usuario | Should | Dado user_token válido, cuando GET /agents, entonces retorna lista con {id, name, created_at, status} sin exponer tokens | CU1 |
-| FR-A05 | El sistema debe permitir revocar un agente | Must | Dado user_token válido, cuando DELETE /agents/{id}, entonces marca agent.status=revoked y rechaza autorizaciones futuras con ese token | CU3 |
-| FR-A06 | El sistema debe validar ownership en revocación | Must | Dado user_token de usuario X, cuando DELETE /agents/{id} de usuario Y, entonces retorna 403 Forbidden | CU3 |
+| ID | Requirement | Priority | Acceptance Criteria |
+|----|-------------|----------|---------------------|
+| FR-U01 | System must allow registering a user with email and password | Must | Given valid email and password >= 8 chars, when POST /users/register, then returns {user_id, user_token} and status 201 |
+| FR-U02 | System must authenticate users with email/password | Must | Given valid credentials, when POST /auth/login, then returns JWT with exp=24h and scopes={policies:*, agents:*, authorizations:*} |
+| FR-U03 | System must reject authentication with invalid credentials | Must | Given incorrect password, when POST /auth/login, then returns 401 Unauthorized |
+| FR-U04 | System must validate email format in registration | Should | Given invalid email (no @), when POST /users/register, then returns 400 Bad Request with descriptive message |
 
 ---
 
-### 4.3 Gestión de Políticas
+### 4.2 Agent Management
 
-| ID | Requisito | Prioridad | Criterio de Aceptación | Caso de Uso |
-|----|-----------|-----------|------------------------|-------------|
-| FR-P01 | El sistema debe permitir crear una política asociada a un agente | Must | Dado user_token válido y agent_id existente, cuando POST /policies con {agent_id, max_amount_per_transaction, daily_limit, approval_threshold}, entonces retorna {policy_id} y status 201 | CU1, CU2 |
-| FR-P02 | El sistema debe validar monto máximo por transacción | Must | Dado policy.max_amount_per_transaction=60000, cuando agente solicita auth por 70000, entonces status=denied, reason="exceeded_max_transaction_limit" | CU3 |
-| FR-P03 | El sistema debe validar límite diario acumulado | Must | Dado policy.daily_limit=100000 y agente ya gastó 80000 hoy, cuando solicita auth por 30000, entonces status=denied, reason="exceeded_daily_limit" | CU1 |
-| FR-P04 | El sistema debe permitir definir threshold para aprobación manual | Must | Dado policy.approval_threshold=50000, cuando agente solicita auth por 55000, entonces status=pending_approval (no denied automáticamente) | CU2 |
-| FR-P05 | El sistema debe aplicar cambios de política inmediatamente | Should | Dado policy actualizada con nuevo max_amount, cuando siguiente auth llega <5 segundos después, entonces usa los nuevos límites | CU1 |
-| FR-P06 | El sistema debe permitir actualizar una política existente | Must | Dado user_token válido y policy_id existente, cuando PUT /policies/{id} con nuevos valores, entonces actualiza y retorna 200 OK | CU2 |
-| FR-P07 | El sistema debe validar que solo el owner puede modificar políticas | Must | Dado user_token de usuario X, cuando PUT /policies/{id} de agente de usuario Y, entonces 403 Forbidden | Seguridad |
-
----
-
-### 4.4 Flujo de Autorización
-
-| ID | Requisito | Prioridad | Criterio de Aceptación | Caso de Uso |
-|----|-----------|-----------|------------------------|-------------|
-| FR-AUTH01 | El sistema debe validar el token del agente antes de procesar | Must | Dado agent_token inválido o revocado, cuando POST /authorizations, entonces 401 Unauthorized | CU1, CU3 |
-| FR-AUTH02 | El sistema debe evaluar la política del agente contra el monto solicitado | Must | Dado policy con límites y auth request con monto, cuando evalúa, entonces retorna status ∈ {approved, denied, pending_approval} según reglas de política | CU1, CU2, CU3 |
-| FR-AUTH03 | El sistema debe retornar status específico según resultado de evaluación | Must | Status debe indicar claramente: approved (auto-aprobado), denied (violación de política), pending_approval (requiere intervención manual) | CU1, CU2, CU3 |
-| FR-AUTH04 | El sistema debe generar authorization_id único para cada solicitud | Must | Cada POST /authorizations genera un authorization_id único usado para capture posterior | CU1, CU2 |
-| FR-AUTH05 | El sistema debe validar estructura del request de autorización | Must | Dado request sin campos requeridos (amount, destination_cbu), entonces 400 Bad Request con detalle de campos faltantes | CU1 |
+| ID | Requirement | Priority | Acceptance Criteria | Use Case |
+|----|-------------|----------|---------------------|----------|
+| FR-A01 | System must allow a user to register a new agent | Must | Given valid user_token, when POST /agents with {name, description}, then returns {agent_id, agent_token} in plain text once only | UC1, UC2, UC3 |
+| FR-A02 | System must store agent_token hashed (ADR-003) | Must | Agent_tokens are stored hashed in DB with bcrypt, making later recovery impossible | UC1 |
+| FR-A03 | System must generate agent_tokens with identifiable format | Must | Generated tokens have format "agt_" + 32 random chars (base62), implicit scopes: {authorizations:create, authorizations:read} | UC1 |
+| FR-A04 | System must allow listing user's agents | Should | Given valid user_token, when GET /agents, then returns list with {id, name, created_at, status} without exposing tokens | UC1 |
+| FR-A05 | System must allow revoking an agent | Must | Given valid user_token, when DELETE /agents/{id}, then marks agent.status=revoked and rejects future authorizations with that token | UC3 |
+| FR-A06 | System must validate ownership in revocation | Must | Given user_token of user X, when DELETE /agents/{id} of user Y, then returns 403 Forbidden | UC3 |
 
 ---
 
-### 4.5 Ejecución de Pagos
+### 4.3 Policy Management
 
-| ID | Requisito | Prioridad | Criterio de Aceptación | Caso de Uso |
-|----|-----------|-----------|------------------------|-------------|
-| FR-PAY01 | El sistema debe ejecutar el pago solo si la autorización está approved | Must | Dado auth.status=denied o pending_approval, cuando POST /authorizations/{id}/capture, entonces 400 Bad Request | CU1, CU2 |
-| FR-PAY02 | El sistema debe ser idempotente en capture (NFR-REL01) | Must | Dado capture ya ejecutado con authorization_id, cuando se repite POST /authorizations/{id}/capture, entonces retorna mismo resultado (mismo payment_id) sin re-ejecutar | CU1 |
-| FR-PAY03 | El sistema debe ejecutar contra Mock Adapter en MVP | Must | Para MVP, POST /authorizations/{id}/capture simula ejecución y retorna payment_id fake sin integración real a MercadoPago (ADR-001) | CU1 |
-| FR-PAY04 | El sistema debe actualizar daily_spent después de capture exitoso | Must | Dado capture exitoso, cuando actualiza estado, entonces incrementa policy.daily_spent para validaciones futuras | CU1, CU3 |
-
----
-
-### 4.6 Aprobación Manual
-
-| ID | Requisito | Prioridad | Criterio de Aceptación | Caso de Uso |
-|----|-----------|-----------|------------------------|-------------|
-| FR-APR01 | El sistema debe permitir al usuario aprobar una autorización pendiente | Must | Dado auth.status=pending_approval, cuando POST /authorizations/{id}/approve con user_token válido, entonces auth.status → approved | CU2 |
-| FR-APR02 | El sistema debe permitir al usuario rechazar una autorización pendiente | Should | Dado auth.status=pending_approval, cuando POST /authorizations/{id}/reject con user_token válido, entonces auth.status → rejected | CU2 |
-| FR-APR03 | El sistema debe permitir listar autorizaciones pendientes | Should | Dado user_token válido, cuando GET /authorizations?status=pending_approval, entonces retorna lista de auths que requieren aprobación | CU2 |
+| ID | Requirement | Priority | Acceptance Criteria | Use Case |
+|----|-------------|----------|---------------------|----------|
+| FR-P01 | System must allow creating a policy associated with an agent | Must | Given valid user_token and existing agent_id, when POST /policies with {agent_id, max_amount_per_transaction, daily_limit, approval_threshold}, then returns {policy_id} and status 201 | UC1, UC2 |
+| FR-P02 | System must validate maximum amount per transaction | Must | Given policy.max_amount_per_transaction=60000, when agent requests auth for 70000, then status=denied, reason="exceeded_max_transaction_limit" | UC3 |
+| FR-P03 | System must validate cumulative daily limit | Must | Given policy.daily_limit=100000 and agent already spent 80000 today, when requests auth for 30000, then status=denied, reason="exceeded_daily_limit" | UC1 |
+| FR-P04 | System must allow defining threshold for manual approval | Must | Given policy.approval_threshold=50000, when agent requests auth for 55000, then status=pending_approval (not automatically denied) | UC2 |
+| FR-P05 | System must apply policy changes immediately | Should | Given updated policy with new max_amount, when next auth arrives <5 seconds later, then uses new limits | UC1 |
+| FR-P06 | System must allow updating an existing policy | Must | Given valid user_token and existing policy_id, when PUT /policies/{id} with new values, then updates and returns 200 OK | UC2 |
+| FR-P07 | System must validate that only owner can modify policies | Must | Given user_token of user X, when PUT /policies/{id} of agent of user Y, then 403 Forbidden | Security |
 
 ---
 
-### 4.7 Historial y Auditoría
+### 4.4 Authorization Flow
 
-| ID | Requisito | Prioridad | Criterio de Aceptación | Caso de Uso |
-|----|-----------|-----------|------------------------|-------------|
-| FR-HIST01 | El sistema debe registrar cada intento de autorización en event log (NFR-REL02) | Must | Todo POST /authorizations genera un registro inmutable en event_log con timestamp, agent_id, amount, result | CU1, CU2, CU3 |
-| FR-HIST02 | El sistema debe permitir consultar historial de transacciones | Should | Dado user_token válido, cuando GET /transactions, entonces retorna lista de autorizaciones con filtros por date_range, agent_id, status | CU1 |
-| FR-HIST03 | El sistema debe registrar cambios de estado de autorizaciones | Must | Cada transición de estado (pending → approved → captured) genera evento en log | CU2 |
+| ID | Requirement | Priority | Acceptance Criteria | Use Case |
+|----|-------------|----------|---------------------|----------|
+| FR-AUTH01 | System must validate agent token before processing | Must | Given invalid or revoked agent_token, when POST /authorizations, then 401 Unauthorized | UC1, UC3 |
+| FR-AUTH02 | System must evaluate agent policy against requested amount | Must | Given policy with limits and auth request with amount, when evaluates, then returns status ∈ {approved, denied, pending_approval} according to policy rules | UC1, UC2, UC3 |
+| FR-AUTH03 | System must return specific status according to evaluation result | Must | Status must clearly indicate: approved (auto-approved), denied (policy violation), pending_approval (requires manual intervention) | UC1, UC2, UC3 |
+| FR-AUTH04 | System must generate unique authorization_id for each request | Must | Each POST /authorizations generates a unique authorization_id used for later capture | UC1, UC2 |
+| FR-AUTH05 | System must validate authorization request structure | Must | Given request without required fields (amount, destination_cbu), then 400 Bad Request with detail of missing fields | UC1 |
 
 ---
 
-## 5. Priorización (MoSCoW)
+### 4.5 Payment Execution
 
-### Must Have (MVP no funciona sin esto)
+| ID | Requirement | Priority | Acceptance Criteria | Use Case |
+|----|-------------|----------|---------------------|----------|
+| FR-PAY01 | System must execute payment only if authorization is approved | Must | Given auth.status=denied or pending_approval, when POST /authorizations/{id}/capture, then 400 Bad Request | UC1, UC2 |
+| FR-PAY02 | System must be idempotent in capture (NFR-REL01) | Must | Given capture already executed with authorization_id, when POST /authorizations/{id}/capture is repeated, then returns same result (same payment_id) without re-executing | UC1 |
+| FR-PAY03 | System must execute against Mock Adapter in MVP | Must | For MVP, POST /authorizations/{id}/capture simulates execution and returns fake payment_id without real MercadoPago integration (ADR-001) | UC1 |
+| FR-PAY04 | System must update daily_spent after successful capture | Must | Given successful capture, when updating state, then increments policy.daily_spent for future validations | UC1, UC3 |
 
-**Core flow (CU1 - Happy path):**
+---
+
+### 4.6 Manual Approval
+
+| ID | Requirement | Priority | Acceptance Criteria | Use Case |
+|----|-------------|----------|---------------------|----------|
+| FR-APR01 | System must allow user to approve a pending authorization | Must | Given auth.status=pending_approval, when POST /authorizations/{id}/approve with valid user_token, then auth.status → approved | UC2 |
+| FR-APR02 | System must allow user to reject a pending authorization | Should | Given auth.status=pending_approval, when POST /authorizations/{id}/reject with valid user_token, then auth.status → rejected | UC2 |
+| FR-APR03 | System must allow listing pending authorizations | Should | Given valid user_token, when GET /authorizations?status=pending_approval, then returns list of auths requiring approval | UC2 |
+
+---
+
+### 4.7 History and Audit
+
+| ID | Requirement | Priority | Acceptance Criteria | Use Case |
+|----|-------------|----------|---------------------|----------|
+| FR-HIST01 | System must log each authorization attempt in event log (NFR-REL02) | Must | Every POST /authorizations generates an immutable record in event_log with timestamp, agent_id, amount, result | UC1, UC2, UC3 |
+| FR-HIST02 | System must allow querying transaction history | Should | Given valid user_token, when GET /transactions, then returns list of authorizations with filters by date_range, agent_id, status | UC1 |
+| FR-HIST03 | System must log authorization state changes | Must | Each state transition (pending → approved → captured) generates event in log | UC2 |
+
+---
+
+## 5. Prioritization (MoSCoW)
+
+### Must Have (MVP doesn't work without this)
+
+**Core flow (UC1 - Happy path):**
 - FR-U01, FR-U02, FR-U03
 - FR-A01, FR-A02, FR-A03, FR-A05
 - FR-P01, FR-P02, FR-P03, FR-P04, FR-P06
@@ -250,106 +250,106 @@
 - FR-APR01
 - FR-HIST01, FR-HIST03
 
-**NFRs críticos:**
+**Critical NFRs:**
 - NFR-REL01, NFR-REL02, NFR-REL03
 - NFR-SEC01, NFR-SEC02, NFR-SEC03
 
 ---
 
-### Should Have (Importante pero no bloqueante)
+### Should Have (Important but not blocking)
 
-- FR-U04 (validación de email - nice to have)
-- FR-A04 (listar agentes - útil pero no crítico)
-- FR-P05 (propagación inmediata - puede tener latencia aceptable)
-- FR-APR02, FR-APR03 (reject + listing - complement del flujo)
-- FR-HIST02 (consulta de historial - demo value)
-
----
-
-### Could Have (Nice to have para post-MVP)
-
-- Paginación en GET /transactions
-- Filtros avanzados en historial
-- Webhooks para notificaciones
-- Métricas de uso por agente
+- FR-U04 (email validation - nice to have)
+- FR-A04 (list agents - useful but not critical)
+- FR-P05 (immediate propagation - can have acceptable latency)
+- FR-APR02, FR-APR03 (reject + listing - flow complement)
+- FR-HIST02 (history query - demo value)
 
 ---
 
-### Won't Have (Explícitamente fuera de scope para MVP)
+### Could Have (Nice to have for post-MVP)
 
-**Funcionalidad:**
-- Multi-currency (solo ARS)
-- Múltiples procesadores de pago (solo Mock Adapter)
-- Categorías de merchant en políticas
-- Horarios permitidos en políticas
-- Geolocalización
-- Reembolsos/chargebacks
-- Rate limiting sofisticado (más allá de validación básica)
-- Notificaciones push reales (solo polling con GET)
-- Dashboard web (solo API + CLI/Postman)
+- Pagination in GET /transactions
+- Advanced filters in history
+- Webhooks for notifications
+- Usage metrics per agent
 
-**Arquitectura:**
-- Multi-tenancy (solo single-tenant para POC)
-- Horizontal scaling (single instance suficiente)
+---
+
+### Won't Have (Explicitly out of scope for MVP)
+
+**Functionality:**
+- Multi-currency (ARS only)
+- Multiple payment processors (Mock Adapter only)
+- Merchant categories in policies
+- Allowed schedules in policies
+- Geolocation
+- Refunds/chargebacks
+- Sophisticated rate limiting (beyond basic validation)
+- Real push notifications (only polling with GET)
+- Web dashboard (API + CLI/Postman only)
+
+**Architecture:**
+- Multi-tenancy (single-tenant POC only)
+- Horizontal scaling (single instance sufficient)
 - Multi-region deployment
-- Cache distribuido (Redis solo para deduplicación si necesario)
-- Queue distribuida (procesamiento síncrono suficiente)
+- Distributed cache (Redis only for deduplication if needed)
+- Distributed queue (synchronous processing sufficient)
 
 **Ops:**
-- Monitoring avanzado (solo logs + UptimeRobot opcional)
-- Alerting automático
+- Advanced monitoring (only logs + optional UptimeRobot)
+- Automatic alerting
 - Auto-scaling
 - Disaster recovery
-- Backup automatizado
+- Automated backup
 
 ---
 
-## 6. Assumptions (Supuestos)
+## 6. Assumptions
 
-> **Qué asumimos como cierto, pero podría ser falso**
+> **What we assume is true, but could be false**
 
-| ID | Supuesto | Riesgo si es falso | Mitigación |
-|----|----------|-------------------|------------|
-| ASM-01 | MercadoPago API es estable y bien documentada | Retrasos en integración post-MVP | Usar Mock Adapter en MVP (ADR-001), diseño con Hexagonal Architecture permite cambiar procesador |
-| ASM-02 | Los agentes IA enviarán requests bien formados | Más validación necesaria, errores frecuentes | Validación estricta en API, buenos mensajes de error |
-| ASM-03 | Bcrypt performance es aceptable para validación de tokens | Latencia alta en auth si muchos agentes | Cache de validaciones recientes (post-MVP), o cambiar a argon2 |
-| ASM-04 | PostgreSQL en free/low-tier hosting soporta carga esperada del MVP | Downtime o throttling | Acceptable para MVP, plan de upgrade documentado para producción |
-| ASM-05 | Carga inicial limitada (single-tenant, baja concurrencia) | No necesita multi-tenancy, scaling, HA en MVP | Arquitectura permite agregar multi-tenancy después si proyecto escala |
+| ID | Assumption | Risk if false | Mitigation |
+|----|------------|--------------|------------|
+| ASM-01 | MercadoPago API is stable and well documented | Post-MVP integration delays | Use Mock Adapter in MVP (ADR-001), design with Hexagonal Architecture allows changing processor |
+| ASM-02 | AI agents will send well-formed requests | More validation needed, frequent errors | Strict API validation, good error messages |
+| ASM-03 | Bcrypt performance is acceptable for token validation | High auth latency if many agents | Cache recent validations (post-MVP), or switch to argon2 |
+| ASM-04 | PostgreSQL on free/low-tier hosting supports expected MVP load | Downtime or throttling | Acceptable for MVP, upgrade plan documented for production |
+| ASM-05 | Limited initial load (single-tenant, low concurrency) | Doesn't need multi-tenancy, scaling, HA in MVP | Architecture allows adding multi-tenancy later if project scales |
 
 ---
 
-## 7. Success Criteria (Criterio de "Done")
+## 7. Success Criteria ("Done" Criterion)
 
-El MVP está completo cuando:
+The MVP is complete when:
 
-### Funcional
-- ✅ Los 3 casos de uso (CU1, CU2, CU3) funcionan end-to-end
-- ✅ E2E test demuestra flujo completo: registro → política → autorización → capture
-- ✅ Demo script ejecutable muestra sistema funcionando
+### Functional
+- ✅ The 3 use cases (UC1, UC2, UC3) work end-to-end
+- ✅ E2E test demonstrates complete flow: register → policy → authorization → capture
+- ✅ Executable demo script shows working system
 
-### No Funcional
-- ✅ NFR-REL01: Test con captures duplicados retorna mismo payment_id
-- ✅ NFR-REL02: Audit log tiene 100% de operaciones
-- ✅ NFR-REL03: Tests demuestran enforcement de políticas
+### Non-Functional
+- ✅ NFR-REL01: Test with duplicate captures returns same payment_id
+- ✅ NFR-REL02: Audit log has 100% of operations
+- ✅ NFR-REL03: Tests demonstrate policy enforcement
 
-### Documentación
-- ✅ OpenAPI spec completa y validada
-- ✅ README permite a otro dev correr el proyecto localmente
-- ✅ ADRs documentan decisiones mayores (ADR-001, ADR-002, ADR-003)
+### Documentation
+- ✅ Complete and validated OpenAPI spec
+- ✅ README allows another dev to run project locally
+- ✅ ADRs document major decisions (ADR-001, ADR-002, ADR-003)
 
 ### Deployment
-- ✅ Sistema deployado y accesible vía URL pública
-- ✅ Health check endpoint funcional
-- ✅ Logs agregados y accesibles
+- ✅ System deployed and accessible via public URL
+- ✅ Functional health check endpoint
+- ✅ Aggregated and accessible logs
 
 ---
 
 ## References
 
-- **DDIA Cap 1:** Reliability, Scalability, Maintainability - Base para NFRs
-- **DDIA Cap 7:** Transactions - Idempotencia y exactly-once semantics
-- **DDIA Cap 9:** Consistency and Consensus - Read-your-writes para políticas
-- **DDIA Cap 11:** Stream Processing - Event sourcing para audit trail
+- **DDIA Ch 1:** Reliability, Scalability, Maintainability - Base for NFRs
+- **DDIA Ch 7:** Transactions - Idempotency and exactly-once semantics
+- **DDIA Ch 9:** Consistency and Consensus - Read-your-writes for policies
+- **DDIA Ch 11:** Stream Processing - Event sourcing for audit trail
 - **ADR-001:** Mock Adapter for MVP
 - **ADR-002:** Transactional Event Log
 - **ADR-003:** Agent Token Storage Strategy

@@ -1,4 +1,4 @@
-# ADR-002: Event Log Transaccional (Atomic Audit Trail)
+# ADR-002: Transactional Event Log (Atomic Audit Trail)
 
 ## Status
 
@@ -8,56 +8,56 @@
 
 ## Context
 
-PaySentry necesita un audit trail completo de todas las operaciones financieras para cumplir con la métrica de confianza: **"Audit trail completeness = 100%"**.
+PaySentry needs a complete audit trail of all financial operations to meet the trust metric: **"Audit trail completeness = 100%"**.
 
-**Fuerzas en juego:**
+**Forces at play:**
 
-1. **Métrica de confianza crítica:** Si falta una sola operación del log, el sistema no es auditable
-2. **Idempotencia:** Para detectar duplicados necesitamos consultar el event log (`idempotency_key`)
-3. **Compliance:** En sistemas financieros, el audit trail es requisito legal, no "nice to have"
-4. **Availability vs Consistency:** Tenemos target de uptime > 99%, pero también 100% completitud del log
+1. **Critical trust metric:** If a single operation is missing from the log, the system is not auditable
+2. **Idempotency:** To detect duplicates we need to query the event log (`idempotency_key`)
+3. **Compliance:** In financial systems, audit trail is a legal requirement, not "nice to have"
+4. **Availability vs Consistency:** We have a >99% uptime target, but also 100% log completeness
 
-**El dilema:**
+**The dilemma:**
 
-Cuando ejecutamos una autorización o pago, ¿qué hacemos si **el event log falla**?
+When we execute an authorization or payment, what do we do if **the event log fails**?
 
 ```
 POST /authorizations/{id}/capture
   ↓
-Evaluar política → approved
+Evaluate policy → approved
   ↓
-[WRITE TO EVENT LOG] ← ¿Qué pasa si esto falla?
+[WRITE TO EVENT LOG] ← What if this fails?
   ↓
-Ejecutar pago via Payment Adapter
+Execute payment via Payment Adapter
 ```
 
-**Opción A:** Rechazar la operación si el log falla (Consistency > Availability)
-**Opción B:** Ejecutar igual y loguear async (Availability > Consistency)
+**Option A:** Reject the operation if the log fails (Consistency > Availability)
+**Option B:** Execute anyway and log async (Availability > Consistency)
 
 ---
 
 ## Decision
 
-**El event log será transaccional y atómico con los cambios de estado.**
+**The event log will be transactional and atomic with state changes.**
 
-No se ejecutará ninguna operación financiera si no puede garantizarse su registro en el audit trail.
+No financial operation will be executed if its logging in the audit trail cannot be guaranteed.
 
-### Implementación
+### Implementation
 
-Todas las operaciones críticas (crear autorización, cambiar estado, ejecutar pago) se escribirán en una **transacción de base de datos** que incluye:
+All critical operations (create authorization, change state, execute payment) will be written in a **database transaction** that includes:
 
-1. El cambio de estado en la tabla principal (ej: `authorizations`)
-2. El evento correspondiente en `event_log`
+1. State change in the main table (e.g., `authorizations`)
+2. Corresponding event in `event_log`
 
 ```python
-# Ejemplo: Aprobar una autorización
+# Example: Approve an authorization
 @transactional
 def approve_authorization(auth_id: str, user_id: str):
-    # 1. Cambiar estado
+    # 1. Change state
     auth = db.query(Authorization).filter_by(id=auth_id).first()
     auth.status = "approved"
 
-    # 2. Registrar evento (misma transacción)
+    # 2. Log event (same transaction)
     event = Event(
         event_type="authorization.approved",
         entity_id=auth_id,
@@ -67,29 +67,29 @@ def approve_authorization(auth_id: str, user_id: str):
     )
     db.add(event)
 
-    # 3. Commit atómico o rollback completo
-    db.commit()  # Si esto falla, NADA se persiste
+    # 3. Atomic commit or full rollback
+    db.commit()  # If this fails, NOTHING persists
 ```
 
-Si el `event_log` INSERT falla → la transacción hace rollback → el cambio de estado no ocurre → retornamos `500 Internal Server Error`.
+If the `event_log` INSERT fails → transaction rolls back → state change doesn't occur → we return `500 Internal Server Error`.
 
-### Consecuencia para Idempotencia
+### Consequence for Idempotency
 
-El Mock Payment Adapter (y luego BIND Adapter) **debe** implementar su propia idempotencia:
+The Mock Payment Adapter (and later BIND Adapter) **must** implement its own idempotency:
 
 ```python
 class MockPaymentAdapter:
     def execute_transfer(self, amount, destination_cbu, idempotency_key):
-        # Buscar transferencia previa con misma key
+        # Look for previous transfer with same key
         existing = self.db.query(MockTransfer).filter_by(
             idempotency_key=idempotency_key
         ).first()
 
         if existing:
-            # Duplicado → retornar resultado original sin re-ejecutar
+            # Duplicate → return original result without re-executing
             return existing.result
 
-        # Primera vez → simular y guardar
+        # First time → simulate and save
         result = self._simulate_transfer(amount, destination_cbu)
         self.db.add(MockTransfer(
             idempotency_key=idempotency_key,
@@ -99,78 +99,78 @@ class MockPaymentAdapter:
         return result
 ```
 
-El event log sigue siendo útil para **observabilidad** (ver todos los intentos, incluyendo duplicados), pero la **garantía de no duplicación** la da el adapter del procesador.
+The event log is still useful for **observability** (see all attempts, including duplicates), but the **non-duplication guarantee** is provided by the processor adapter.
 
 ---
 
 ## Consequences
 
-### Positivas
+### Positive
 
-- ✅ **Garantía de consistencia:** Imposible tener autorización sin evento, o evento sin autorización
-- ✅ **Audit trail completo:** 100% de operaciones logueadas (métrica de confianza cumplida)
-- ✅ **Diseño más simple:** No necesitamos manejar eventual consistency, retries complejos, o dead letter queues
-- ✅ **Debugging más fácil:** El estado de la DB y el event log siempre están sincronizados
-- ✅ **Compliance out-of-the-box:** Cualquier auditoría puede confiar en el event log
+- ✅ **Consistency guarantee:** Impossible to have authorization without event, or event without authorization
+- ✅ **Complete audit trail:** 100% of operations logged (trust metric met)
+- ✅ **Simpler design:** We don't need to handle eventual consistency, complex retries, or dead letter queues
+- ✅ **Easier debugging:** DB state and event log are always synchronized
+- ✅ **Compliance out-of-the-box:** Any audit can trust the event log
 
-### Negativas
+### Negative
 
-- ⚠️ **Event log se vuelve SPOF (Single Point of Failure):** Si la DB está caída, todo el sistema está caído
-- ⚠️ **Availability acoplada a la DB:** `Uptime(PaySentry) ≤ Uptime(PostgreSQL)`
-- ⚠️ **Latencia de escritura:** Cada operación paga el costo de escribir a `event_log` (+ ~10-20ms por INSERT)
-- ⚠️ **Crecimiento de tabla event_log:** Se llena rápido, eventualmente necesitará particionado/archivado
+- ⚠️ **Event log becomes SPOF (Single Point of Failure):** If DB is down, entire system is down
+- ⚠️ **Availability coupled to DB:** `Uptime(PaySentry) ≤ Uptime(PostgreSQL)`
+- ⚠️ **Write latency:** Each operation pays the cost of writing to `event_log` (~10-20ms per INSERT)
+- ⚠️ **Event_log table growth:** Fills up fast, will eventually need partitioning/archiving
 
-### Neutras
+### Neutral
 
-- El event log debe estar en la misma base de datos que las tablas transaccionales (no puede ser un servicio externo)
-- No podemos usar logging async (ej: enviar a CloudWatch vía queue) como reemplazo del event log transaccional
+- Event log must be in the same database as transactional tables (can't be an external service)
+- We can't use async logging (e.g., send to CloudWatch via queue) as a replacement for transactional event log
 
 ---
 
 ## Alternatives Considered
 
-| Alternativa | Pros | Cons | Razón de Descarte |
-|-------------|------|------|-------------------|
-| **Event log transaccional (elegida)** | Consistencia garantizada, audit trail 100% | DB se vuelve SPOF | ✅ En sistemas financieros, consistency > availability |
-| **Event log async con retry** | Mayor availability, menor latencia | Posibilidad de eventos perdidos (99.9%, no 100%) | ❌ Viola métrica de confianza ("100% completitud") |
-| **Event log en servicio separado** | Desacopla availability | Requiere 2-phase commit o saga compleja | ❌ Complejidad excesiva para MVP |
-| **No tener event log, solo logs de aplicación** | Más simple | Cero auditabilidad, no cumple compliance | ❌ Destruye propuesta de valor ("OAuth para dinero") |
+| Alternative | Pros | Cons | Reason for Discarding |
+|-------------|------|------|----------------------|
+| **Transactional event log (chosen)** | Guaranteed consistency, 100% audit trail | DB becomes SPOF | ✅ In financial systems, consistency > availability |
+| **Async event log with retry** | Higher availability, lower latency | Possibility of lost events (99.9%, not 100%) | ❌ Violates trust metric ("100% completeness") |
+| **Event log in separate service** | Decouples availability | Requires 2-phase commit or complex saga | ❌ Excessive complexity for MVP |
+| **No event log, only app logs** | Simpler | Zero auditability, doesn't meet compliance | ❌ Destroys value proposition ("OAuth for money") |
 
 ---
 
 ## References
 
-- **DDIA Cap 7 - Transactions:** "Atomicity simplifies the programming model: if a transaction cannot be completed in full, the application can be sure that it didn't change anything."
-- **DDIA Cap 9 - Consistency Guarantees:** "For systems that require strong consistency (financial transactions), you cannot compromise on this guarantee."
+- **DDIA Ch 7 - Transactions:** "Atomicity simplifies the programming model: if a transaction cannot be completed in full, the application can be sure that it didn't change anything."
+- **DDIA Ch 9 - Consistency Guarantees:** "For systems that require strong consistency (financial transactions), you cannot compromise on this guarantee."
 - **Martin Kleppmann - Event Sourcing:** https://martin.kleppmann.com/2015/03/04/turning-the-database-inside-out.html
 
 ---
 
 ## Notes
 
-### Implicaciones para la Elección de Base de Datos
+### Implications for Database Choice
 
-Esta decisión refuerza la elección de **PostgreSQL** (vía Supabase) porque:
-- ACID transactions nativas
-- Performance excelente para transacciones cortas (< 50ms típicamente)
-- Free tier de Supabase incluye 500MB (suficiente para MVP con ~10K eventos)
+This decision reinforces the choice of **PostgreSQL** (via Supabase) because:
+- Native ACID transactions
+- Excellent performance for short transactions (typically <50ms)
+- Supabase free tier includes 500MB (sufficient for MVP with ~10K events)
 
-### Estrategia de Mitigación de Availability
+### Availability Mitigation Strategy
 
-Si bien aceptamos que el event log es SPOF, podemos mitigar con:
+While we accept that event log is SPOF, we can mitigate with:
 
-1. **Monitoring agresivo:** Alerta si DB response time > 200ms
-2. **Health checks:** `GET /health` verifica conectividad a DB antes de aceptar requests
-3. **Circuit breaker:** Si DB está caída, responder `503 Service Unavailable` inmediatamente (no esperar timeout)
-4. **Documentar en SLA:** "Uptime de PaySentry depende de uptime de PostgreSQL (Supabase: 99.9% SLA)"
+1. **Aggressive monitoring:** Alert if DB response time > 200ms
+2. **Health checks:** `GET /health` verifies DB connectivity before accepting requests
+3. **Circuit breaker:** If DB is down, respond `503 Service Unavailable` immediately (don't wait for timeout)
+4. **Document in SLA:** "PaySentry uptime depends on PostgreSQL uptime (Supabase: 99.9% SLA)"
 
-### Cuándo Reconsiderar Esta Decisión
+### When to Reconsider This Decision
 
-Reconsiderar si:
-- El volumen crece a >1M eventos/día (event_log se vuelve cuello de botella)
-- Necesitamos uptime > 99.9% (requeriría PostgreSQL con réplicas, fuera de presupuesto MVP)
-- Queremos agregar event streaming en tiempo real (ej: WebSockets para dashboard live)
+Reconsider if:
+- Volume grows to >1M events/day (event_log becomes bottleneck)
+- We need uptime >99.9% (would require PostgreSQL with replicas, outside MVP budget)
+- We want to add real-time event streaming (e.g., WebSockets for live dashboard)
 
-En ese caso, evaluar **Event Sourcing con Kafka/Redis Streams** como reemplazo del event_log transaccional.
+In that case, evaluate **Event Sourcing with Kafka/Redis Streams** as replacement for transactional event_log.
 
-Pero para MVP: **keep it simple, keep it consistent**.
+But for MVP: **keep it simple, keep it consistent**.

@@ -2,237 +2,237 @@
 
 ---
 
-## 1. Contexto del Mercado
+## 1. Market Context
 
-Los agentes de IA autónomos están pasando de experimentales a producción. OpenAI lanzó Operator (enero 2025), Google está desarrollando Project Jarvis, y Visa anunció Intelligent Commerce para pagos autónomos.
+Autonomous AI agents are moving from experimental to production. OpenAI launched Operator (January 2025), Google is developing Project Jarvis, and Visa announced Intelligent Commerce for autonomous payments.
 
-El cambio fundamental: **los agentes ya no solo consultan información, ahora ejecutan acciones** — incluyendo transacciones financieras.
+The fundamental shift: **agents no longer just query information, they now execute actions** — including financial transactions.
 
-**¿Por qué AHORA?**
-- Los agentes IA tienen suficiente fiabilidad para tareas específicas
-- Las fintechs buscan diferenciación con features "AI-powered"
-- Los usuarios quieren automatización, pero no al costo de perder control
+**Why NOW?**
+- AI agents have sufficient reliability for specific tasks
+- Fintechs seek differentiation with "AI-powered" features
+- Users want automation, but not at the cost of losing control
 
-El problema es que **la infraestructura de autorización no existe**. OAuth resolvió "delegar acceso a datos". Nadie resolvió "delegar acceso a dinero" de forma granular y auditable.
-
----
-
-## 2. El Problema Específico
-
-### ¿Qué problema existe HOY?
-
-**Los usuarios quieren delegar pagos a agentes IA, pero no confían en darles acceso total a sus fondos.**
-
-### ¿Quién lo sufre?
-
-1. **Fintechs y wallets** que quieren ofrecer "AI assistant para pagos"
-   - No tienen infraestructura de autorización granular
-   - Risk/Compliance no aprueba dar acceso total a un agente
-
-2. **Usuarios finales** que ven valor en automatización pero:
-   - No confían en que el agente no se equivoque
-   - Quieren límites: "solo gastá hasta $X", "solo en merchant Y"
-   - Necesitan poder revocar acceso inmediatamente
-
-3. **Desarrolladores de agentes IA** que:
-   - No tienen un estándar para "pedir permiso para pagar"
-   - Cada integración es custom y sin trazabilidad
-
-### ¿Cuánto les duele?
-
-- **Oportunidad perdida:** Fintechs no pueden lanzar features de agentes IA → pierden competitividad
-- **Riesgo regulatorio:** Dar acceso sin límites → problemas de compliance
-- **Fricción de usuario:** Cada pago requiere confirmación manual → mata la propuesta de valor de "autónomo"
-
-### ¿Cómo lo resuelven hoy?
-
-**Workaround 1:** Dar credenciales completas al agente
-- Problema: Sin límites, sin audit trail, sin revocación granular
-
-**Workaround 2:** Confirmación manual en cada transacción
-- Problema: Mata la autonomía, alta fricción
-
-**Workaround 3:** No ofrecer la funcionalidad
-- Problema: Pierden market share vs competidores que sí innovan
-
-**¿Por qué son insuficientes?**
-Porque nadie resolvió el problema de **confianza programable**. Queremos automatizar, pero con guardrails.
+The problem is that **the authorization infrastructure doesn't exist**. OAuth solved "delegate access to data". No one has solved "delegate access to money" in a granular and auditable way.
 
 ---
 
-## 3. Propuesta de Solución
+## 2. The Specific Problem
 
-**PaySentry es un authorization gateway que permite a fintechs y wallets delegar pagos y transferencias a agentes IA con políticas granulares y trazabilidad completa, a diferencia de dar acceso directo a tarjetas que no tiene límites configurables ni audit trail.**
+### What problem exists TODAY?
 
-**Analogía:** OAuth, pero para dinero.
+**Users want to delegate payments to AI agents, but don't trust giving them total access to their funds.**
 
----
+### Who suffers from it?
 
-## 4. Actores del Sistema
+1. **Fintechs and wallets** that want to offer "AI assistant for payments"
+   - Don't have granular authorization infrastructure
+   - Risk/Compliance won't approve giving total access to an agent
 
-### Actor 1: Usuario Final (owner del dinero)
+2. **End users** who see value in automation but:
+   - Don't trust that the agent won't make mistakes
+   - Want limits: "only spend up to $X", "only at merchant Y"
+   - Need to revoke access immediately
 
-**¿Quién es?**
-Una persona que usa una fintech/wallet y quiere automatizar pagos recurrentes o delegarlos a un asistente IA.
+3. **AI agent developers** who:
+   - Don't have a standard for "request permission to pay"
+   - Each integration is custom and without traceability
 
-**¿Qué necesita del sistema?**
-- Definir políticas de gasto para el agente ("máximo $50k/mes", "solo en Edenor", "transferencias solo a mi CBU de ahorro")
-- Ver historial completo de qué hizo el agente
-- Revocar permisos inmediatamente si algo sale mal
-- Aprobar manualmente transacciones que excedan ciertos thresholds
+### How much does it hurt?
 
-**¿Qué problema le resuelve PaySentry?**
-Le da **control y visibilidad**. Puede automatizar sin miedo a que el agente se descontrole.
+- **Lost opportunity:** Fintechs can't launch AI agent features → lose competitiveness
+- **Regulatory risk:** Giving unrestricted access → compliance problems
+- **User friction:** Each payment requires manual confirmation → kills the "autonomous" value proposition
 
-### Actor 2: Agente IA (delegado)
+### How do they solve it today?
 
-**¿Quién es?**
-Un sistema autónomo (ej: asistente de pagos, bot de expensas) que ejecuta acciones financieras en nombre del usuario.
+**Workaround 1:** Give full credentials to the agent
+- Problem: No limits, no audit trail, no granular revocation
 
-**¿Qué necesita del sistema?**
-- Solicitar autorización para ejecutar un pago o transferencia
-- Saber si fue aprobado/denegado y por qué
-- Ejecutar el pago si tiene autorización
-- Recibir confirmación de que el pago se procesó
+**Workaround 2:** Manual confirmation on each transaction
+- Problem: Kills autonomy, high friction
 
-**¿Qué problema le resuelve PaySentry?**
-Le da **un protocolo estándar** para "pedir permiso". No necesita integrarse directamente con el procesador de pagos, solo con PaySentry.
+**Workaround 3:** Don't offer the functionality
+- Problem: Lose market share vs competitors who do innovate
 
-### Actor 3: Fintech/Wallet (integrador)
-
-**¿Quién es?**
-La empresa que ofrece servicios financieros y quiere agregar capacidades de agentes IA.
-
-**¿Qué necesita del sistema?**
-- Infraestructura lista para ofrecer "AI-powered payments"
-- Compliance: audit trail completo, políticas configurables
-- No construir todo desde cero
-
-**¿Qué problema le resuelve PaySentry?**
-Les da **time-to-market rápido** y **compliance out-of-the-box**. En lugar de construir toda la lógica de autorización, políticas y audit, integran una API.
+**Why are they insufficient?**
+Because no one solved the problem of **programmable trust**. We want to automate, but with guardrails.
 
 ---
 
-## 5. Alcance del MVP
+## 3. Proposed Solution
 
-### 5.1 QUÉ SÍ ENTRA (Must Have)
+**PaySentry is an authorization gateway that allows fintechs and wallets to delegate payments and transfers to AI agents with granular policies and complete traceability, unlike giving direct card access which has no configurable limits or audit trail.**
 
-**Flujo mínimo end-to-end:**
+**Analogy:** OAuth, but for money.
 
-1. **Registro de agente:** Usuario registra un agente y recibe un token de acceso
-2. **Definición de política:** Usuario crea política con límite por transacción y límite diario
-3. **Solicitud de autorización:** Agente pide autorización para transferencia de $X a CBU Y
-4. **Evaluación automática:** Sistema valida contra políticas
-5. **Aprobación manual (threshold):** Si monto > threshold, usuario debe aprobar manualmente
-6. **Ejecución:** Sistema ejecuta la transferencia contra un Mock Adapter (simulado)
-7. **Audit trail:** Todas las operaciones se registran en event log inmutable
+---
 
-**Features esenciales:**
-1. Autenticación JWT con scopes separados (user_token, agent_token)
-2. CRUD de políticas (límite por tx, límite diario, threshold de aprobación manual)
-3. Evaluación de políticas en tiempo real
-4. Estados de autorización (pending, approved, denied, captured)
-5. Mock Adapter para simular procesador de pagos
-6. Event store append-only para auditoría
-7. API RESTful documentada (OpenAPI)
+## 4. System Actors
 
-### 5.2 QUÉ NO ENTRA (Out of Scope)
+### Actor 1: End User (money owner)
 
-**Diferido para v2:**
-- Múltiples procesadores de pago (solo Mock para MVP)
-- Políticas avanzadas (categorías de merchant, horarios, geolocalización)
-- Webhooks para notificaciones async
-- Dashboard web (solo API)
-- Multi-currency (solo ARS)
-- Reembolsos/chargebacks
-- Rate limiting sofisticado
+**Who is it?**
+A person who uses a fintech/wallet and wants to automate recurring payments or delegate them to an AI assistant.
+
+**What do they need from the system?**
+- Define spending policies for the agent ("maximum $50k/month", "only at Edenor", "transfers only to my savings account")
+- See complete history of what the agent did
+- Revoke permissions immediately if something goes wrong
+- Manually approve transactions that exceed certain thresholds
+
+**What problem does PaySentry solve for them?**
+Gives them **control and visibility**. They can automate without fear that the agent will go rogue.
+
+### Actor 2: AI Agent (delegate)
+
+**Who is it?**
+An autonomous system (e.g., payment assistant, expense bot) that executes financial actions on behalf of the user.
+
+**What do they need from the system?**
+- Request authorization to execute a payment or transfer
+- Know if it was approved/denied and why
+- Execute the payment if authorized
+- Receive confirmation that the payment was processed
+
+**What problem does PaySentry solve for them?**
+Gives them **a standard protocol** to "ask for permission". No need to integrate directly with the payment processor, only with PaySentry.
+
+### Actor 3: Fintech/Wallet (integrator)
+
+**Who is it?**
+The company that offers financial services and wants to add AI agent capabilities.
+
+**What do they need from the system?**
+- Ready infrastructure to offer "AI-powered payments"
+- Compliance: complete audit trail, configurable policies
+- Not build everything from scratch
+
+**What problem does PaySentry solve for them?**
+Gives them **fast time-to-market** and **compliance out-of-the-box**. Instead of building all the authorization logic, policies and audit, they integrate an API.
+
+---
+
+## 5. MVP Scope
+
+### 5.1 WHAT'S IN (Must Have)
+
+**Minimum end-to-end flow:**
+
+1. **Agent registration:** User registers an agent and receives an access token
+2. **Policy definition:** User creates policy with per-transaction limit and daily limit
+3. **Authorization request:** Agent requests authorization for transfer of $X to account Y
+4. **Automatic evaluation:** System validates against policies
+5. **Manual approval (threshold):** If amount > threshold, user must approve manually
+6. **Execution:** System executes the transfer against a Mock Adapter (simulated)
+7. **Audit trail:** All operations are logged in immutable event log
+
+**Essential features:**
+1. JWT authentication with separate scopes (user_token, agent_token)
+2. CRUD of policies (per-tx limit, daily limit, manual approval threshold)
+3. Real-time policy evaluation
+4. Authorization states (pending, approved, denied, captured)
+5. Mock Adapter to simulate payment processor
+6. Append-only event store for audit
+7. Documented RESTful API (OpenAPI)
+
+### 5.2 WHAT'S OUT (Out of Scope)
+
+**Deferred to v2:**
+- Multiple payment processors (only Mock for MVP)
+- Advanced policies (merchant categories, schedules, geolocation)
+- Webhooks for async notifications
+- Web dashboard (API only)
+- Multi-currency (ARS only)
+- Refunds/chargebacks
+- Sophisticated rate limiting
 - Multi-tenancy
 
 ---
 
-## 6. Métricas de Éxito
+## 6. Success Metrics
 
-### 6.1 Métricas Técnicas
+### 6.1 Technical Metrics
 
-| Métrica | Target MVP | Cómo se mide |
-|---------|------------|--------------|
-| Latencia p99 autorización | < 500ms | Load test con k6 |
+| Metric | MVP Target | How to measure |
+|--------|------------|----------------|
+| p99 authorization latency | < 500ms | Load test with k6 |
 | Uptime | > 99% | Monitoring (UptimeRobot) |
-| Tasa de error (errores del sistema, no denials) | < 1% | APM logs |
-| Idempotencia | 100% captures duplicados retornan mismo resultado | Integration tests |
+| Error rate (system errors, not denials) | < 1% | APM logs |
+| Idempotency | 100% duplicate captures return same result | Integration tests |
 
-### 6.2 Métricas de Confianza (Trust Indicators)
+### 6.2 Trust Metrics (Trust Indicators)
 
-> Estas métricas demuestran que el sistema está listo para generar confianza, sin necesidad de usuarios reales.
+> These metrics demonstrate the system is ready to generate trust, without needing real users.
 
-| Métrica | Target MVP | Por qué indica confianza |
-|---------|------------|--------------------------|
-| Audit trail completeness | 100% operaciones logueadas | Transparencia total = precondición de confianza. Si falta UNA operación del log, el sistema no es auditable. |
-| Policy enforcement accuracy | 0% violaciones de política | Consistencia absoluta = el sistema hace lo que promete. Un solo caso de violación destruye credibilidad. |
-| Policy update propagation | < 5 segundos | Control inmediato = usuario siente que tiene el poder. Latencia alta = frustración. |
-| Idempotency guarantee | 100% duplicados manejados | Cero doble cobros = confianza en reliability financiera. No puede ser 99.9%, debe ser 100%. |
-| Documentación completa | 100% endpoints con OpenAPI + ejemplos | Portfolio quality: demuestra profesionalismo y pensamiento arquitectónico. |
-
----
-
-## 7. Riesgos Conocidos (Preview)
-
-| Riesgo | Impacto | Probabilidad | Mitigación inicial |
-|--------|---------|--------------|-------------------|
-| Doble ejecución de pago (no idempotente) | Alto | Media | Idempotency keys en captures, tests de duplicación |
-| Inconsistencia entre policy cache y DB | Medio | Media | TTL corto en cache (60s), invalidación explícita en updates |
-| Mock Adapter oculta problemas reales de integración | Medio | Alta | Documentar asunciones sobre API real, diseño con Hexagonal Architecture |
-| Scope creep (agregar features "fáciles") | Medio | Alta | Mantener lista explícita de Won't Have, revisión semanal |
-| Estado inconsistente si proceso muere mid-flight | Alto | Baja | Usar transacciones DB, event sourcing para reconstruir estado |
+| Metric | MVP Target | Why it indicates trust |
+|--------|------------|------------------------|
+| Audit trail completeness | 100% operations logged | Total transparency = precondition for trust. If ONE operation is missing from the log, the system is not auditable. |
+| Policy enforcement accuracy | 0% policy violations | Absolute consistency = system does what it promises. A single violation case destroys credibility. |
+| Policy update propagation | < 5 seconds | Immediate control = user feels they have the power. High latency = frustration. |
+| Idempotency guarantee | 100% duplicates handled | Zero double charges = trust in financial reliability. Can't be 99.9%, must be 100%. |
+| Complete documentation | 100% endpoints with OpenAPI + examples | Portfolio quality: demonstrates professionalism and architectural thinking. |
 
 ---
 
-## Caso de Uso Concreto: Pago Automático de Expensas
+## 7. Known Risks (Preview)
 
-**Personaje:** Martín tiene expensas de $45.000/mes que vencen el día 10.
+| Risk | Impact | Probability | Initial Mitigation |
+|------|--------|-------------|-------------------|
+| Double payment execution (not idempotent) | High | Medium | Idempotency keys in captures, duplication tests |
+| Inconsistency between policy cache and DB | Medium | Medium | Short TTL in cache (60s), explicit invalidation on updates |
+| Mock Adapter hides real integration issues | Medium | High | Document assumptions about real API, design with Hexagonal Architecture |
+| Scope creep (adding "easy" features) | Medium | High | Maintain explicit Won't Have list, weekly review |
+| Inconsistent state if process dies mid-flight | High | Low | Use DB transactions, event sourcing to rebuild state |
 
-**Sin PaySentry:**
-- Martín recibe notificación el día 10
-- Debe abrir la app, ingresar CVV, confirmar pago
-- Si se olvida → mora
+---
 
-**Con PaySentry:**
-1. Martín registra "Agente de Expensas"
-2. Define política:
-   - Límite por transacción: $60.000
-   - Solo transferencias a CBU de administración
-   - Threshold aprobación manual: $50.000
-3. El día 10, el agente:
-   - Solicita autorización para $45.000 a CBU del consorcio
-   - PaySentry valida: ✅ Dentro del límite, ✅ CBU permitido, ✅ No requiere aprobación manual
-   - Aprueba automáticamente
-   - Ejecuta transferencia
-4. Martín recibe notificación: "Tu agente pagó $45.000 en expensas"
+## Concrete Use Case: Automatic Expense Payment
 
-**Escenario de falla:**
-- Mes siguiente, el agente pide $55.000 (aumento inesperado)
-- PaySentry detecta: ⚠️ Supera threshold de $50k
+**Character:** Martín has $45,000/month expenses due on the 10th.
+
+**Without PaySentry:**
+- Martín receives notification on the 10th
+- Must open the app, enter CVV, confirm payment
+- If he forgets → late fee
+
+**With PaySentry:**
+1. Martín registers "Expense Agent"
+2. Defines policy:
+   - Per-transaction limit: $60,000
+   - Only transfers to building management account
+   - Manual approval threshold: $50,000
+3. On the 10th, the agent:
+   - Requests authorization for $45,000 to building account
+   - PaySentry validates: ✅ Within limit, ✅ Allowed account, ✅ No manual approval needed
+   - Approves automatically
+   - Executes transfer
+4. Martín receives notification: "Your agent paid $45,000 in expenses"
+
+**Failure scenario:**
+- Next month, agent requests $55,000 (unexpected increase)
+- PaySentry detects: ⚠️ Exceeds $50k threshold
 - Status: `pending_approval`
-- Martín recibe push: "Aprobar pago de $55k?"
-- Martín revisa y aprueba manualmente
+- Martín receives push: "Approve $55k payment?"
+- Martín reviews and approves manually
 
-**Valor demostrado:**
-- Automatización del caso feliz (sin fricción)
-- Control en casos excepcionales (requiere aprobación)
-- Audit trail completo (cada request logueado)
-
----
-
-## Checklist de Completitud
-
-- [x] Cada sección tiene contenido concreto (no placeholders)
-- [x] El problema es específico y medible
-- [x] El alcance MVP es realista para 8-12 semanas
-- [x] Las métricas tienen números, no solo "alto" o "bueno"
-- [x] Puedo explicar esto en 3 minutos a alguien no técnico
+**Value demonstrated:**
+- Automation of happy path (zero friction)
+- Control in exceptional cases (requires approval)
+- Complete audit trail (every request logged)
 
 ---
 
-## Próximo Paso
+## Completeness Checklist
 
-**Artefacto siguiente:** `02-requirements.md` - Traducir este problema en requisitos funcionales y no funcionales verificables.
+- [x] Each section has concrete content (no placeholders)
+- [x] The problem is specific and measurable
+- [x] MVP scope is realistic for 8-12 weeks
+- [x] Metrics have numbers, not just "high" or "good"
+- [x] I can explain this in 3 minutes to a non-technical person
+
+---
+
+## Next Step
+
+**Next artifact:** `02-requirements.md` - Translate this problem into verifiable functional and non-functional requirements.

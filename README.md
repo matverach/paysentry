@@ -1,96 +1,161 @@
 # PaySentry
 
-> Authorization Gateway para Pagos de Agentes IA
+> Authorization Gateway for AI Agent Payments
 
 [![Status](https://img.shields.io/badge/status-design%20phase-yellow)]()
+[![Spanish](https://img.shields.io/badge/docs-español-blue)](README.es.md)
 
-## 🎯 Qué es PaySentry
+## 🎯 What is PaySentry
 
-PaySentry es infraestructura de autorización para pagos delegados a agentes IA. Pensalo como **OAuth pero para dinero**: un usuario define políticas (límites, categorías, merchants) y PaySentry valida cada transacción antes de ejecutarla.
+PaySentry is authorization infrastructure for payments delegated to AI agents. Think of it as **OAuth but for money**: a user defines policies (limits, categories, merchants) and PaySentry validates each transaction before executing it.
 
 ```
 ┌────────┐      ┌─────────────┐      ┌────────────┐      ┌─────────┐
-│ Agente │  ->  │  PaySentry  │  ->  │ Procesador │  ->  │ Compra/ │
-│  IA    │      │  (valida)   │      │ de Pagos   │      │   Trx   │
+│ Agent  │  ->  │  PaySentry  │  ->  │  Payment   │  ->  │Purchase/│
+│   AI   │      │ (validates) │      │ Processor  │      │Transfer │
 └────────┘      └─────────────┘      └────────────┘      └─────────┘
                        |
                        v
                  ┌───────────┐
-                 │ Políticas │
-                 │ del User  │
+                 │   User    │
+                 │ Policies  │
                  └───────────┘
 ```
 
-## 🚧 Estado del Proyecto
+## 🚧 Project Status
 
-Este proyecto está en **fase de diseño de arquitectura**. El objetivo es explorar y documentar patrones de arquitectura para sistemas financieros distribuidos.
+This project is in **architecture design phase**. The goal is to explore and document architecture patterns for distributed financial systems.
 
-### Progreso
+### Progress
 
-| Fase | Estado | Documento |
-|------|--------|-----------|
-| Problem Statement | ✅ Completado | [01-problem.md](docs/01-problem.md) |
-| Requirements | ✅ Completado | [02-requirements.md](docs/02-requirements.md) |
-| Data Model | ⏳ Siguiente | [03-data-model.md](docs/03-data-model.md) |
-| ADRs | 🔄 En progreso (3/?) | [docs/adr/](docs/adr/) |
-| System Context (C4) | ⏳ Pendiente | docs/architecture/ |
-| API Spec | ⏳ Pendiente | docs/api/ |
-| Implementation | ⏳ Pendiente | src/ |
+| Phase | Status | Document |
+|-------|--------|----------|
+| Problem Statement | ✅ Complete | [01-problem.md](docs/01-problem.md) |
+| Requirements | ✅ Complete | [02-requirements.md](docs/02-requirements.md) |
+| Data Model | ✅ Complete | [03-data-model.md](docs/03-data-model.md) |
+| ADRs | ✅ 4 complete | [docs/adr/](docs/adr/) |
+| System Context (C4) | ⏳ Next | docs/architecture/ |
+| API Spec | ⏳ Pending | docs/api/ |
+| Implementation | ⏳ Pending | src/ |
 
 ### Architecture Decision Records (ADRs)
 
-| ADR | Decisión | Estado |
+| ADR | Decision | Status |
 |-----|----------|--------|
-| [ADR-001](docs/adr/001-mock-adapter-for-mvp.md) | Mock Adapter para MVP | ✅ Accepted |
-| [ADR-002](docs/adr/002-transactional-event-log.md) | Event Log Transaccional | ✅ Accepted |
+| [ADR-001](docs/adr/001-mock-adapter-mvp.md) | Mock Adapter for MVP | ✅ Accepted |
+| [ADR-002](docs/adr/002-transactional-event-log.md) | Transactional Event Log | ✅ Accepted |
 | [ADR-003](docs/adr/003-agent-token-storage.md) | Agent Token Storage (bcrypt) | ✅ Accepted |
+| [ADR-004](docs/adr/004-atomic-aggregate-updates.md) | Atomic Aggregate Updates | ✅ Accepted |
 
-## 📚 Documentación
+## 📊 Data Model
 
-- **[docs/](docs/)** - Documentación de diseño
+The system uses PostgreSQL with normalized entities for policies and agents, and a unified event table for audit trail.
+
+```mermaid
+erDiagram
+    users ||--o{ agents : "owns"
+    agents ||--|| policies : "has"
+    agents ||--o{ agent_stats : "tracks"
+    agents ||--o{ authorizations : "requests"
+    authorizations ||--o| transactions : "results_in"
+
+    users {
+        uuid id PK
+        string email UK
+        string google_id UK
+        timestamp created_at
+    }
+
+    agents {
+        uuid id PK
+        uuid user_id FK
+        uuid policy_id FK
+        string token_hash
+        timestamp created_at
+        timestamp revoked_at
+    }
+
+    policies {
+        uuid id PK
+        decimal threshold_amount
+        decimal approval_amount
+        decimal daily_limit
+        int max_daily_transactions
+    }
+
+    agent_stats {
+        uuid id PK
+        uuid agent_id FK
+        string period_type
+        date period_start
+        decimal total_spent
+        int tx_count
+    }
+
+    authorizations {
+        uuid id PK
+        uuid agent_id FK
+        string state
+        decimal amount
+        string destination
+    }
+
+    transactions {
+        uuid id PK
+        uuid authorization_id FK
+        string result
+        string external_ref
+    }
+```
+See [03-data-model.md](docs/03-data-model.md) for complete schema with constraints and indexes.
+
+## 📚 Documentation
+
+- **[docs/](docs/)** - Design documentation
 - **[docs/adr/](docs/adr/)** - Architecture Decision Records
+- **[docs/03-data-model.md](docs/03-data-model.md)** - Complete data model with SQL schema
 
-## 🔑 Conceptos Clave
+## 🔑 Key Concepts
 
-### Actores
+### Actors
 
-| Actor | Descripción | Permisos |
-|-------|-------------|----------|
-| **Usuario** | Owner del dinero, define políticas | CRUD políticas, aprobar transacciones |
-| **Agente** | IA que ejecuta compras | Solo pedir autorización y capturar |
-| **Integrador** | Fintech/wallet que integra PaySentry | API access |
+| Actor | Description | Permissions |
+|-------|-------------|------------|
+| **User** | Money owner, defines policies | CRUD policies, approve transactions |
+| **Agent** | AI that executes purchases | Only request authorization and capture |
+| **Integrator** | Fintech/wallet integrating PaySentry | API access |
 
-### Flujo de Autorización
+### Authorization Flow
 
-1. Usuario configura política para un agente
-2. Agente solicita autorización (`POST /v1/authorizations`)
-3. PaySentry evalúa contra política
-4. Si aprobado → agente captura (`POST /v1/authorizations/{id}/capture`)
-5. PaySentry ejecuta pago contra procesador
-6. Transacción queda en audit log
+1. User configures policy for an agent
+2. Agent requests authorization (`POST /v1/authorizations`)
+3. PaySentry evaluates against policy
+4. If approved → agent captures (`POST /v1/authorizations/{id}/capture`)
+5. PaySentry executes payment against processor
+6. Transaction logged in audit trail
 
-## 🛠️ Stack Técnico (Propuesto)
+## 🛠️ Tech Stack (Proposed)
 
-| Componente | Tecnología |
-|------------|------------|
+| Component | Technology |
+|-----------|------------|
 | Backend | Python (FastAPI) |
 | Database | PostgreSQL |
 | Cache | Redis |
-| Procesador de Pagos | MercadoPago |
-| Infra | Railway/Render |
+| Payment Processor | MercadoPago (Mock Adapter for MVP) |
+| Infrastructure | Railway/Render |
 
-## 📖 Referencias
+## 📖 References
 
 - [Designing Data-Intensive Applications](https://dataintensive.net/) - Martin Kleppmann
 - [MercadoPago API Docs](https://www.mercadopago.com.ar/developers)
-- [C4 Model](https://c4model.com/) - Arquitectura de software
+- [C4 Model](https://c4model.com/) - Software architecture
 
-## 👤 Autor
+## 👤 Author
 
-Proyecto arquitectónico para explorar patrones de sistemas de autorización financiera.
+Architectural project exploring patterns for financial authorization systems.
 
 ---
 
 ## Changelog
 
-Ver [CHANGELOG.md](CHANGELOG.md) para historial de cambios.
+See [CHANGELOG.md](CHANGELOG.md) for change history.

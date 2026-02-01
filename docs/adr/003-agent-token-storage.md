@@ -8,92 +8,92 @@
 
 ## Context
 
-Los agent tokens son credenciales de larga duración que permiten a los agentes IA ejecutar autorizaciones de pago en nombre del usuario. A diferencia de los user tokens (JWT con exp=24h), los agent tokens no tienen expiración automática y solo se invalidan cuando el usuario revoca el agente.
+Agent tokens are long-lived credentials that allow AI agents to execute payment authorizations on behalf of the user. Unlike user tokens (JWT with exp=24h), agent tokens don't have automatic expiration and are only invalidated when the user revokes the agent.
 
-**El problema:** ¿Cómo almacenamos estos tokens en la base de datos para balancear seguridad y usabilidad?
+**The problem:** How do we store these tokens in the database to balance security and usability?
 
-**Fuerzas en juego:**
-- **Seguridad:** Si la DB es comprometida (SQL injection, dump accidental), queremos minimizar el daño
-- **Usabilidad:** Los usuarios pueden necesitar ver/copiar el token para reconfigurarlo
-- **Simplicidad:** Evitar infraestructura compleja de key management para un MVP
-- **Compliance:** Aunque no manejamos datos de tarjetas (PCI-DSS), sí manejamos credenciales de acceso
+**Forces at play:**
+- **Security:** If the DB is compromised (SQL injection, accidental dump), we want to minimize damage
+- **Usability:** Users may need to view/copy the token to reconfigure it
+- **Simplicity:** Avoid complex key management infrastructure for an MVP
+- **Compliance:** While we don't handle card data (PCI-DSS), we do handle access credentials
 
-**Por qué ahora:** Esta decisión impacta el diseño del endpoint POST /agents y el schema de la tabla `agents`. Debe tomarse antes de implementar.
+**Why now:** This decision impacts the design of the POST /agents endpoint and the `agents` table schema. Must be decided before implementation.
 
 ---
 
 ## Decision
 
-**Almacenaremos agent tokens hasheados en la base de datos usando bcrypt, y los mostraremos en plain text solo una vez en la respuesta de creación.**
+**We will store agent tokens hashed in the database using bcrypt, and show them in plain text only once in the creation response.**
 
-Esto significa:
-1. Cuando el usuario crea un agente → generamos token con formato `agt_{32_random_chars}`
-2. Retornamos `{agent_id, agent_token}` en la respuesta HTTP (una sola vez)
-3. Almacenamos `bcrypt(agent_token)` en `agents.token_hash`
-4. **No hay endpoint para recuperar el token después** — si se pierde, debe crear un nuevo agente
+This means:
+1. When the user creates an agent → we generate token with format `agt_{32_random_chars}`
+2. We return `{agent_id, agent_token}` in the HTTP response (only once)
+3. We store `bcrypt(agent_token)` in `agents.token_hash`
+4. **There is no endpoint to retrieve the token later** — if lost, must create a new agent
 
-**Patrón:** Exactly-once token delivery
+**Pattern:** Exactly-once token delivery
 
 ---
 
 ## Consequences
 
-### Positivas
-- **Seguridad:** Dump de DB no expone tokens utilizables → mitigación de riesgo crítico
-- **Industry standard:** Mismo patrón que GitHub Personal Access Tokens, Stripe API Keys, AWS Access Keys
-- **Simplicidad:** No requiere encryption key management ni infraestructura adicional
-- **Auditabilidad:** Logs de autenticación pueden verificar uso del token sin exponerlo
+### Positive
+- **Security:** DB dump doesn't expose usable tokens → critical risk mitigation
+- **Industry standard:** Same pattern as GitHub Personal Access Tokens, Stripe API Keys, AWS Access Keys
+- **Simplicity:** Doesn't require encryption key management or additional infrastructure
+- **Auditability:** Auth logs can verify token usage without exposing it
 
-### Negativas
-- **UX friction:** Si el usuario pierde el token, debe revocar el agente viejo y crear uno nuevo
-- **No recuperable:** No hay forma de "resetear" o "ver mi token" — esto puede generar soporte adicional
-- **Educación:** Requiere documentación clara en POST /agents explicando "copiar ahora o perderlo"
+### Negative
+- **UX friction:** If the user loses the token, must revoke old agent and create a new one
+- **Not recoverable:** No way to "reset" or "show my token" — this may generate support overhead
+- **Education:** Requires clear documentation in POST /agents explaining "copy now or lose it"
 
-### Neutras
-- La creación de agentes es relativamente infrecuente (1-5 agentes por usuario típicamente)
-- El costo de bcrypt en validación es negligible comparado con latencia de red
+### Neutral
+- Agent creation is relatively infrequent (1-5 agents per user typically)
+- bcrypt cost in validation is negligible compared to network latency
 
 ---
 
 ## Alternatives Considered
 
-| Alternativa | Pros | Cons | Razón de Descarte |
-|-------------|------|------|-------------------|
-| Plain text storage | Simple, recuperable, podés mostrar tokens después | Dump de DB = compromiso total de todos los tokens | Riesgo de seguridad inaceptable |
-| Encrypted storage | Tokens recuperables, más seguro que plain text | Requiere key management, encryption keys en memoria/config, si comprometen la key = mismo que plain text | Complejidad injustificada para MVP, no elimina riesgo fundamental |
-| Hasheo con bcrypt (elegida) | Seguro, industry standard, simple | No recuperable después de creación | N/A — el trade-off de UX es aceptable para ganar seguridad |
-| JWT con refresh tokens | Tokens cortos + refresh, patrón conocido | Agentes necesitan lógica de refresh, complejidad en gestión de sesiones | Over-engineering para MVP — agentes no son users interactivos |
+| Alternative | Pros | Cons | Reason for Discarding |
+|-------------|------|------|----------------------|
+| Plain text storage | Simple, recoverable, can show tokens later | DB dump = total compromise of all tokens | Unacceptable security risk |
+| Encrypted storage | Tokens recoverable, more secure than plain text | Requires key management, encryption keys in memory/config, if key is compromised = same as plain text | Unjustified complexity for MVP, doesn't eliminate fundamental risk |
+| Hashing with bcrypt (chosen) | Secure, industry standard, simple | Not recoverable after creation | N/A — UX trade-off is acceptable to gain security |
+| JWT with refresh tokens | Short tokens + refresh, known pattern | Agents need refresh logic, session management complexity | Over-engineering for MVP — agents aren't interactive users |
 
 ---
 
 ## References
 
-- [OWASP: Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) - Aplica también a tokens de larga duración
-- GitHub Personal Access Tokens - Mismo patrón de "mostrar una vez"
-- Stripe API Keys - Prefijos identificables (`sk_`, `pk_`) + almacenamiento hasheado
+- [OWASP: Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) - Also applies to long-lived tokens
+- GitHub Personal Access Tokens - Same "show once" pattern
+- Stripe API Keys - Identifiable prefixes (`sk_`, `pk_`) + hashed storage
 
 ---
 
 ## Notes
 
-**Formato del token:** `agt_{32_chars_base62}`
-- El prefijo `agt_` permite identificar el tipo de token en logs (vs `usr_` para user tokens)
-- Base62 (0-9, a-z, A-Z) evita caracteres ambiguos y es URL-safe
-- 32 chars = 190 bits de entropía (más que suficiente para prevenir brute force)
+**Token format:** `agt_{32_chars_base62}`
+- The `agt_` prefix allows identifying token type in logs (vs `usr_` for user tokens)
+- Base62 (0-9, a-z, A-Z) avoids ambiguous characters and is URL-safe
+- 32 chars = 190 bits of entropy (more than sufficient to prevent brute force)
 
-**Implementación de validación:**
+**Validation implementation:**
 ```python
-# En cada request con agent_token
+# On each request with agent_token
 def validate_agent_token(token: str) -> Agent | None:
-    # Extraer los primeros 8 chars como hint para búsqueda (opcional, optimización)
-    # Hacer bcrypt.checkpw(token, agent.token_hash) para cada agente activo del usuario
-    # Si match → retornar agente
-    # Si no match → retornar None (401 Unauthorized)
+    # Extract first 8 chars as search hint (optional, optimization)
+    # Do bcrypt.checkpw(token, agent.token_hash) for each active agent of user
+    # If match → return agent
+    # If no match → return None (401 Unauthorized)
 ```
 
-**Consideración futura (post-MVP):** Si el volumen de autenticaciones se vuelve problema (bcrypt es CPU-intensive), podemos:
-1. Agregar cache de tokens validados (Redis con TTL corto)
-2. Usar argon2 en lugar de bcrypt (más moderno, mejor perf)
-3. Implementar token rotation periódica con notificaciones
+**Future consideration (post-MVP):** If auth volume becomes an issue (bcrypt is CPU-intensive), we can:
+1. Add cache of validated tokens (Redis with short TTL)
+2. Use argon2 instead of bcrypt (more modern, better perf)
+3. Implement periodic token rotation with notifications
 
-Pero para MVP con <10 agentes por usuario, bcrypt directo es suficiente.
+But for MVP with <10 agents per user, direct bcrypt is sufficient.
