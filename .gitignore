@@ -1,0 +1,47 @@
+# Development notes and documentation drafts
+CLAUDE.md
+claude.md
+.claude/
+portfolio-*.md
+state.md
+*personal*.md
+*background*.md
+*linkedin*.md
+
+# ====================================
+# ARCHIVOS TEMPORALES
+# ====================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ====================================
+# SECRETS Y CONFIGURACIÓN
+# ====================================
+
+.env
+.env.local
+*.key
+*.pem
+secrets/
+config/local.yaml
