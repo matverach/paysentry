@@ -5,7 +5,9 @@
 ```mermaid
 erDiagram
     users ||--o{ agents : "owns"
+    users ||--o{ adapters : "connects"
     agents ||--|| policies : "has"
+    agents }o--|| adapters : "uses"
     agents ||--o{ agent_stats : "tracks"
     agents ||--o{ authorizations : "requests"
     authorizations ||--o| transactions : "results_in"
@@ -14,6 +16,7 @@ erDiagram
     transactions ||--o{ events : "logs"
     agents ||--o{ events : "logs"
     policies ||--o{ events : "logs"
+    adapters ||--o{ events : "logs"
 
     users {
         uuid id PK
@@ -22,10 +25,20 @@ erDiagram
         timestamp created_at
     }
 
+    adapters {
+        uuid id PK
+        uuid user_id FK
+        string provider
+        jsonb credentials
+        timestamp created_at
+        timestamp revoked_at
+    }
+
     agents {
         uuid id PK
         uuid user_id FK
         uuid policy_id FK
+        uuid adapter_id FK
         string token_hash
         timestamp created_at
         timestamp revoked_at
@@ -77,6 +90,7 @@ erDiagram
         uuid actor_id
         uuid authorization_id
         uuid transaction_id
+        uuid adapter_id
         uuid agent_id
         uuid policy_id
         string previous_state
@@ -114,12 +128,41 @@ CREATE INDEX idx_users_google_id ON users(google_id);
 
 ---
 
+#### adapters
+```sql
+CREATE TABLE adapters (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider VARCHAR(50) NOT NULL,
+    credentials JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMP,
+
+    CONSTRAINT uq_user_provider UNIQUE(user_id, provider)
+);
+
+CREATE INDEX idx_adapters_user_id ON adapters(user_id);
+CREATE INDEX idx_adapters_provider ON adapters(provider);
+```
+
+**Design notes:**
+- Each user can connect one adapter per provider (UNIQUE constraint)
+- `provider` = 'mock', 'mercadopago', 'bind' — discriminator for Strategy pattern
+- `credentials` = JSONB for flexibility (different providers need different fields)
+- MVP uses `provider = 'mock'` with `credentials = '{}'`
+- `revoked_at` = soft delete; runtime validation prevents use of revoked adapters
+- `ON DELETE CASCADE` on user: adapter deleted if user deletes account
+- See ADR-001 for mock adapter rationale, ADR-005 for data model decision
+
+---
+
 #### agents
 ```sql
 CREATE TABLE agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     policy_id UUID NOT NULL REFERENCES policies(id) ON DELETE RESTRICT,
+    adapter_id UUID NOT NULL REFERENCES adapters(id) ON DELETE RESTRICT,
     token_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     revoked_at TIMESTAMP
@@ -127,12 +170,15 @@ CREATE TABLE agents (
 
 CREATE INDEX idx_agents_user_id ON agents(user_id);
 CREATE INDEX idx_agents_token_hash ON agents(token_hash);
+CREATE INDEX idx_agents_adapter_id ON agents(adapter_id);
 ```
 
 **Design notes:**
 - `token_hash` stores bcrypt hash (see ADR-003)
+- `adapter_id` determines which payment provider this agent uses (see ADR-005)
 - `ON DELETE CASCADE` on user: delete agent if user deletes account
 - `ON DELETE RESTRICT` on policy: prevent deleting policy while agent exists
+- `ON DELETE RESTRICT` on adapter: prevent deleting adapter while agent exists (use soft delete via `revoked_at`)
 - `revoked_at` NULL = active, NOT NULL = revoked
 
 ---
@@ -256,6 +302,7 @@ CREATE INDEX idx_tx_external_ref ON transactions(external_ref);
 #### events
 ```sql
 CREATE TYPE event_type AS ENUM (
+    'ADAPTER_CREATED', 'ADAPTER_REVOKED',
     'AGENT_CREATED', 'AGENT_REVOKED',
     'POLICY_CREATED', 'POLICY_UPDATED', 'POLICY_DELETED',
     'AUTH_REQUESTED', 'AUTH_APPROVED', 'AUTH_REJECTED', 'AUTH_CAPTURED',
@@ -264,7 +311,7 @@ CREATE TYPE event_type AS ENUM (
 
 CREATE TYPE actor_type AS ENUM ('user', 'agent', 'system');
 
-CREATE TYPE entity_type AS ENUM ('agent', 'policy', 'authorization', 'transaction');
+CREATE TYPE entity_type AS ENUM ('adapter', 'agent', 'policy', 'authorization', 'transaction');
 
 CREATE TABLE events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -278,6 +325,7 @@ CREATE TABLE events (
     -- Sparse columns (only populated when applicable)
     authorization_id UUID REFERENCES authorizations(id),
     transaction_id UUID REFERENCES transactions(id),
+    adapter_id UUID REFERENCES adapters(id),
     agent_id UUID REFERENCES agents(id),
     policy_id UUID REFERENCES policies(id),
     previous_state VARCHAR(50),
@@ -311,8 +359,10 @@ CREATE INDEX idx_events_actor ON events(actor_type, actor_id);
 | **No user_id in transactions** | Derived via authorization.agent_id.user_id — avoid redundancy |
 | **No amount/destination in transactions** | Derived via authorization — single source of truth |
 | **Separate agent_stats table** | Allows multiple period types without schema change |
+| **Separate adapters table** | Allows multiple providers per user; agent references specific adapter |
 | **Sparse columns in events** | Trade-off: simpler queries vs storage efficiency. Acceptable for audit log. |
 | **1:1 policy per agent** | Simplicity for MVP. Denormalized if multiple agents share policy (acceptable for low volume). |
+| **1:1 adapter per provider per user** | UNIQUE(user_id, provider) — MVP simplicity, can relax later if needed |
 
 ---
 
@@ -320,10 +370,11 @@ CREATE INDEX idx_events_actor ON events(actor_type, actor_id);
 
 ### 1. Validate payment request (authorization flow)
 ```sql
--- Get agent + policy
-SELECT a.*, p.*
+-- Get agent + policy + adapter
+SELECT a.*, p.*, ad.provider, ad.credentials, ad.revoked_at as adapter_revoked_at
 FROM agents a
 JOIN policies p ON a.policy_id = p.id
+JOIN adapters ad ON a.adapter_id = ad.id
 WHERE a.id = ?;
 
 -- Get daily stats
@@ -341,16 +392,24 @@ WHERE agent_id = ?
   AND period_start = CURRENT_DATE;
 ```
 
-### 2. Get user's agents (dashboard)
+### 2. Get user's adapters (settings)
 ```sql
-SELECT a.*, p.*
+SELECT * FROM adapters
+WHERE user_id = ?
+  AND revoked_at IS NULL;
+```
+
+### 3. Get user's agents (dashboard)
+```sql
+SELECT a.*, p.*, ad.provider
 FROM agents a
 JOIN policies p ON a.policy_id = p.id
+JOIN adapters ad ON a.adapter_id = ad.id
 WHERE a.user_id = ?
   AND a.revoked_at IS NULL;
 ```
 
-### 3. Get pending authorizations (manual approval UI)
+### 4. Get pending authorizations (manual approval UI)
 ```sql
 SELECT a.*, ag.*, u.email
 FROM authorizations a
@@ -361,7 +420,7 @@ WHERE a.state = 'pending'
 ORDER BY a.created_at DESC;
 ```
 
-### 4. Get transaction history (audit trail)
+### 5. Get transaction history (audit trail)
 ```sql
 SELECT a.*, t.*, ag.id as agent_id
 FROM authorizations a
@@ -372,7 +431,7 @@ ORDER BY a.created_at DESC
 LIMIT 50;
 ```
 
-### 5. Reconstruct authorization history (compliance)
+### 6. Reconstruct authorization history (compliance)
 ```sql
 SELECT * FROM events
 WHERE entity_type = 'authorization'
@@ -386,6 +445,7 @@ ORDER BY created_at ASC;
 
 Assumptions:
 - 100 users
+- 150 adapters (1.5 per user average — mock + one real)
 - 200 agents (2 per user average)
 - 1000 authorizations/month
 - 10 events per authorization average
@@ -393,6 +453,7 @@ Assumptions:
 | Table | Rows (month 1) | Row size | Total |
 |-------|----------------|----------|-------|
 | users | 100 | 0.5 KB | 50 KB |
+| adapters | 150 | 0.5 KB | 75 KB |
 | agents | 200 | 0.5 KB | 100 KB |
 | policies | 200 | 0.3 KB | 60 KB |
 | agent_stats | 200 | 0.3 KB | 60 KB |
@@ -417,8 +478,9 @@ CREATE TYPE event_type AS ENUM (...);
 CREATE TYPE actor_type AS ENUM (...);
 CREATE TYPE entity_type AS ENUM (...);
 
--- 2. Create tables without FKs
+-- 2. Create tables without FKs (order matters for FKs)
 CREATE TABLE users (...);
+CREATE TABLE adapters (...);
 CREATE TABLE policies (...);
 CREATE TABLE agents (...);
 CREATE TABLE agent_stats (...);
@@ -427,12 +489,15 @@ CREATE TABLE transactions (...);
 CREATE TABLE events (...);
 
 -- 3. Add foreign keys
+ALTER TABLE adapters ADD CONSTRAINT fk_adapters_user ...;
 ALTER TABLE agents ADD CONSTRAINT fk_agents_user ...;
 ALTER TABLE agents ADD CONSTRAINT fk_agents_policy ...;
+ALTER TABLE agents ADD CONSTRAINT fk_agents_adapter ...;
 -- (etc)
 
 -- 4. Create indexes
 CREATE INDEX idx_users_email ...;
+CREATE INDEX idx_adapters_user_id ...;
 CREATE INDEX idx_agents_user_id ...;
 -- (etc)
 ```
@@ -440,14 +505,18 @@ CREATE INDEX idx_agents_user_id ...;
 ### Future schema changes
 - Add `weekly`/`monthly` to period_type enum
 - Add new event types without changing table structure
+- Add new providers to adapters (just INSERT, no schema change)
 - Add merchant category support: new column in policies + authorizations
+- Relax UNIQUE(user_id, provider) if users need multiple accounts per provider
 
 ---
 
 ## References
 
+- ADR-001: Mock Adapter for Payment Processor in MVP
 - ADR-002: Transactional Event Log
 - ADR-003: Agent Token Storage Strategy
 - ADR-004: Atomic Aggregate Updates
+- ADR-005: Payment Adapter Data Model
 - DDIA Chapter 3: Storage and Retrieval (indexes)
 - DDIA Chapter 7: Transactions (ACID guarantees)
