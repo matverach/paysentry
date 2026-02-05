@@ -33,7 +33,7 @@ This project is in **architecture design phase**. The goal is to explore and doc
 | Problem Statement | ✅ Complete | [01-problem.md](docs/01-problem.md) |
 | Requirements | ✅ Complete | [02-requirements.md](docs/02-requirements.md) |
 | Data Model | ✅ Complete | [03-data-model.md](docs/03-data-model.md) |
-| ADRs | ✅ 4 complete | [docs/adr/](docs/adr/) |
+| ADRs | ✅ 5 complete | [docs/adr/](docs/adr/) |
 | System Context (C4) | ⏳ Next | docs/architecture/ |
 | API Spec | ⏳ Pending | docs/api/ |
 | Implementation | ⏳ Pending | src/ |
@@ -46,6 +46,7 @@ This project is in **architecture design phase**. The goal is to explore and doc
 | [ADR-002](docs/adr/002-transactional-event-log.md) | Transactional Event Log | ✅ Accepted |
 | [ADR-003](docs/adr/003-agent-token-storage.md) | Agent Token Storage (bcrypt) | ✅ Accepted |
 | [ADR-004](docs/adr/004-atomic-aggregate-updates.md) | Atomic Aggregate Updates | ✅ Accepted |
+| [ADR-005](docs/adr/005-payment-adapter-data-model.md) | Payment Adapter Data Model | ✅ Accepted |
 
 ## 📊 Data Model
 
@@ -53,8 +54,10 @@ The system uses PostgreSQL with normalized entities for policies and agents, and
 
 ```mermaid
 erDiagram
+    users ||--o{ adapters : "connects"
     users ||--o{ agents : "owns"
     agents ||--|| policies : "has"
+    agents }o--|| adapters : "uses"
     agents ||--o{ agent_stats : "tracks"
     agents ||--o{ authorizations : "requests"
     authorizations ||--o| transactions : "results_in"
@@ -66,9 +69,18 @@ erDiagram
         timestamp created_at
     }
 
+    adapters {
+        uuid id PK
+        uuid user_id FK
+        string provider
+        jsonb credentials
+        timestamp revoked_at
+    }
+
     agents {
         uuid id PK
         uuid user_id FK
+        uuid adapter_id FK
         uuid policy_id FK
         string token_hash
         timestamp created_at
